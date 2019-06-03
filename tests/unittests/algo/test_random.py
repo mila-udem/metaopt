@@ -24,6 +24,7 @@ def test_seeding(space):
     """Verify that seeding makes sampling deterministic"""
     random_search = Random(space)
 
+    assert hasattr(random_search, 'rng')
     random_search.seed_rng(1)
     a = random_search.suggest(1)[0]
     assert not numpy.allclose(a, random_search.suggest(1)[0])

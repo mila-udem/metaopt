@@ -83,7 +83,8 @@ class MongoDB(AbstractDB):
         self.options = {'authSource': name}
         self.uri = None
 
-        super(MongoDB, self).__init__(host, name, port, username, password)
+        super(MongoDB, self).__init__(host=host, name=name, port=port,
+                                      username=username, password=password)
 
     @mongodb_exception_wrapper
     def initiate_connection(self):
@@ -245,6 +246,7 @@ class MongoDB(AbstractDB):
         result = dbcollection.delete_many(filter=query)
         return result.acknowledged
 
+    # pylint: disable=access-member-before-definition, attribute-defined-outside-init
     def _sanitize_attrs(self):
         """Sanitize attributes using MongoDB's 'uri_parser' module."""
         try:

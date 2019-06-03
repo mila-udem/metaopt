@@ -209,8 +209,9 @@ class ExperimentBuilder(object):
 
         # Information should be enough to infer experiment's name.
         log.debug("Creating %s database client with args: %s", dbtype, db_opts)
+
         try:
-            Database(of_type=dbtype, **db_opts)
+            Database(dbtype, **db_opts)
         except ValueError:
             if Database().__class__.__name__.lower() != dbtype.lower():
                 raise

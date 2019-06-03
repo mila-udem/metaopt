@@ -1,0 +1,24 @@
+# General info
+include LICENSE
+include *.rst
+exclude RESEARCH.md
+
+# Control and setup helpers
+include src/orion/core/_version.py
+include versioneer.py
+
+# Exclude development helpers
+exclude .travis.yml
+exclude tox.ini
+exclude *-requirements.txt
+exclude .pylintrc
+exclude codecov.yml
+exclude .mailmap
+
+# Include src, tests, docs
+recursive-include docs *.rst *.py *.gitkeep
+include docs/requirements.txt
+prune docs/build
+prune docs/src/reference
+recursive-include src *.py
+recursive-include tests *.py *.yaml

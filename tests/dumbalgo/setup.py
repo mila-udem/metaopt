@@ -1,22 +1,22 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-"""Installation script for `orion.algo.gradient_descent`."""
+"""Installation script for `orion.algo.dumbalgo`."""
 from setuptools import setup
 
 setup_args = dict(
-    name='orion.algo.gradient_descent',
+    name='orion.algo.dumbalgo',
     version=0.1,
-    description="Implement a gradient descent algorithm, for demo and testing.",
+    description="Implement a dumb algorithm for tests purposes.",
     license='BSD-3-Clause',
     author='Christos Tsirigotis',
     author_email='tsirif@gmail.com',
-    url='https://github.com/epistimio/orion',
+    url='https://github.com/mila-udem/orion',
     packages=['orion.algo'],
     package_dir={'': 'src'},
     include_package_data=True,
     entry_points={
         'BaseAlgorithm': [
-            'gradient_descent = orion.algo.gradient_descent:Gradient_Descent'
+            'dumbalgo = orion.algo.dumbalgo:DumbAlgo'
             ],
         },
     install_requires=['orion.core'],

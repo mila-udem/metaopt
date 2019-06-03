@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-:mod:`orion.core.io.database` -- Wrappers for database frameworks
+:mod:`orion.core.io.instance` -- Wrappers for database frameworks
 =================================================================
 
 .. module:: database
@@ -10,15 +10,16 @@
 Contains :class:`AbstractDB`, an interface for databases.
 Currently, implemented wrappers:
 
-   - :class:`orion.core.io.database.mongodb.MongoDB`
+   - :class:`orion.core.io.instance.mongodb.MongoDB`
 
 """
 from abc import abstractmethod, abstractproperty
 
-from orion.core.utils import (AbstractSingletonType, SingletonFactory)
+from orion.core.utils import (AbstractSingletonType, Concept, SingletonFactory,
+                              SingletonType, Wrapper)
 
 
-class AbstractDB(object, metaclass=AbstractSingletonType):
+class AbstractDB(Concept, metaclass=AbstractSingletonType):
     """Base class for database framework wrappers.
 
     Attributes
@@ -38,17 +39,13 @@ class AbstractDB(object, metaclass=AbstractSingletonType):
 
     """
 
+    name = "Database"
     ASCENDING = 0
     DESCENDING = 1
 
-    def __init__(self, host='localhost', name=None,
-                 port=None, username=None, password=None):
+    def __init__(self, **kwargs):
         """Init method, see attributes of :class:`AbstractDB`."""
-        self.host = host
-        self.name = name
-        self.port = port
-        self.username = username
-        self.password = password
+        super(AbstractDB, self).__init__(**kwargs)
 
         self._db = None
         self._conn = None
@@ -215,7 +212,7 @@ class ReadOnlyDB(object):
 
     .. seealso::
 
-        :py:class:`orion.core.io.database.AbstractDB`
+        :py:class:`orion.core.io.instance.AbstractDB`
     """
 
     __slots__ = ('_database', )
@@ -255,11 +252,30 @@ class DuplicateKeyError(DatabaseError):
     pass
 
 
-# pylint: disable=too-few-public-methods,abstract-method
-class Database(AbstractDB, metaclass=SingletonFactory):
-    """Class used to inject dependency on a database framework.
+# pylint: disable=too-few-public-methods,abstract-method,too-many-public-methods
+class Database(Wrapper, metaclass=SingletonType):
+    """Wraps an instance of the database"""
 
-    .. seealso:: `Factory` metaclass and `AbstractDB` interface.
-    """
+    ASCENDING = 0
+    DESCENDING = 1
 
-    pass
+    def __init__(self, of_type="", **db_opts):
+        """Initialize the database instance"""
+        database_dict = {of_type: db_opts}
+        super(Database, self).__init__(instance=database_dict)
+
+    @property
+    def wraps(self):
+        """Wrap an AbstractDB"""
+        return AbstractDB
+
+    @property
+    def factory_type(self):
+        """Return a SingletonFactory for the SingletonType AbstractDB"""
+        return SingletonFactory
+
+    def __getattr__(self, name):
+        """Get attribute from wrapped database."""
+        instance = Database.__getattribute__(self, 'instance')
+
+        return getattr(instance, name)

@@ -712,6 +712,17 @@ class TestCompositeAdapterForwardBackward(object):
         assert new_param not in (adapted_trials[-1].params)
 
 
+def test_created_adapter_has_string_of_type(dummy_param):
+    """Test if the configuration dict of the newly created adapter is not a tuple"""
+    dimension_addition_adapter = DimensionAddition(dummy_param)
+
+    configuration = dimension_addition_adapter.configuration[0]
+
+    new_adapter = Adapter.build([configuration]).adapters[0]
+
+    assert type(new_adapter.configuration[0]['of_type']) is not tuple
+
+
 def test_dimension_addition_configuration(dummy_param):
     """Test :meth:`orion.core.evc.adapters.DimensionAddition.configuration`"""
     dimension_addition_adapter = DimensionAddition(dummy_param)

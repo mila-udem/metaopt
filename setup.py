@@ -63,7 +63,7 @@ setup_args = dict(
         'console_scripts': [
             'orion = orion.core.cli:main',
             ],
-        'OptimizationAlgorithm': [
+        'BaseAlgorithm': [
             'random = orion.algo.random:Random',
             ],
         },

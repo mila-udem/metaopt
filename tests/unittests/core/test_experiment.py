@@ -538,7 +538,7 @@ class TestReserveTrial(object):
     def test_reserve_none(self):
         """Find nothing, return None."""
         try:
-            Database(of_type='MongoDB', name='orion_test',
+            Database(of_type=('orion.core.io.database.mongodb', 'MongoDB'), name='orion_test',
                      username='user', password='pass')
         except (TypeError, ValueError):
             pass
@@ -703,7 +703,7 @@ def test_is_done_property_with_algo(hacked_exp):
     # Configure experiment to have instantiated algo
     hacked_exp.configure(hacked_exp.configuration)
     assert hacked_exp.is_done is False
-    hacked_exp.algorithms.algorithm.done = True
+    hacked_exp.algorithms.instance.done = True
     assert hacked_exp.is_done is True
 
 
@@ -811,7 +811,7 @@ def test_view_algo_is_done_property(hacked_exp):
 
     assert experiment_view.is_done is False
 
-    hacked_exp.algorithms.algorithm.done = True
+    hacked_exp.algorithms.instance.done = True
 
     assert experiment_view.is_done is True
 

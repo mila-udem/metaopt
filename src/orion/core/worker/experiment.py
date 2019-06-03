@@ -16,6 +16,7 @@ import logging
 import random
 import sys
 
+from orion.algo.base import PrimaryAlgo
 from orion.core.cli.evc import fetch_branching_configuration
 from orion.core.evc.adapters import Adapter, BaseAdapter
 from orion.core.evc.conflicts import detect_conflicts
@@ -24,7 +25,6 @@ from orion.core.io.experiment_branch_builder import ExperimentBranchBuilder
 from orion.core.io.interactive_commands.branching_prompt import BranchingPrompt
 from orion.core.io.space_builder import SpaceBuilder
 from orion.core.utils.format_trials import trial_to_tuple
-from orion.core.worker.primary_algo import PrimaryAlgo
 from orion.core.worker.strategy import (BaseParallelStrategy,
                                         Strategy)
 from orion.core.worker.trial import Trial
@@ -622,9 +622,13 @@ class Experiment(object):
             self.refers['adapter'] = Adapter.build(self.refers['adapter'])
 
         if not self.producer.get('strategy'):
-            self.producer = {'strategy': Strategy(of_type="MaxParallelStrategy")}
+            log.warning('You have not set a producer strategy, the basic '
+                        'NoParallelStrategy will be used')
+            strategy = Strategy({"NoParallelStrategy": {}})
+            self.producer = {'strategy': strategy}
         elif not isinstance(self.producer.get('strategy'), BaseParallelStrategy):
-            self.producer = {'strategy': Strategy(of_type=self.producer['strategy'])}
+            strategy = Strategy({self.producer['strategy']: {}})
+            self.producer = {'strategy': strategy}
 
     def _branch_config(self, conflicts, branching_configuration):
         """Ask for a different identifier for this experiment. Set :attr:`refers`

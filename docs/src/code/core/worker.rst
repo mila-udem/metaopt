@@ -12,5 +12,4 @@ Worker and its components
    worker/trial
    worker/producer
    worker/consumer
-   worker/primary_algo
    worker/transformer

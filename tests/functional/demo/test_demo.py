@@ -60,7 +60,8 @@ def test_demo(database, monkeypatch):
     assert exp['pool_size'] == 1
     assert exp['max_trials'] == 100
     assert exp['algorithms'] == {'gradient_descent': {'learning_rate': 0.1,
-                                                      'dx_tolerance': 1e-7}}
+                                                      'dx_tolerance': 1e-7,
+                                                      'seed': None}}
     assert 'user' in exp['metadata']
     assert 'datetime' in exp['metadata']
     assert 'orion_version' in exp['metadata']
@@ -164,7 +165,8 @@ def test_workon(database):
     assert exp['pool_size'] == 1
     assert exp['max_trials'] == 100
     assert exp['algorithms'] == {'gradient_descent': {'learning_rate': 0.1,
-                                                      'dx_tolerance': 1e-7}}
+                                                      'dx_tolerance': 1e-7,
+                                                      'seed': None}}
     assert 'user' in exp['metadata']
     assert 'datetime' in exp['metadata']
     assert 'user_script' in exp['metadata']

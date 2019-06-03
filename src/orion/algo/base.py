@@ -12,12 +12,14 @@
 from abc import (ABCMeta, abstractmethod)
 import logging
 
-from orion.core.utils import Factory
+from orion.core.utils import (Concept, Wrapper)
+from orion.core.worker.transformer import build_required_space
+
 
 log = logging.getLogger(__name__)
 
 
-class BaseAlgorithm(object, metaclass=ABCMeta):
+class BaseAlgorithm(Concept, metaclass=ABCMeta):
     """Base class describing what an algorithm can do.
 
     Notes
@@ -82,8 +84,10 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
     """
 
     requires = []
+    name = "Algorithm"
+    implementation_module = "orion.algo"
 
-    def __init__(self, space, **kwargs):
+    def __init__(self, space, seed=None, **kwargs):
         """Declare problem's parameter space and set up algo's hyperparameters.
 
         Parameters
@@ -95,27 +99,12 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
            hyperparameter names to values.
 
         """
-        log.debug("Creating Algorithm object of %s type with parameters:\n%s",
-                  type(self).__name__, kwargs)
         self._space = space
-        self._param_names = list(kwargs.keys())
-        # Instantiate tunable parameters of an algorithm
-        for varname, param in kwargs.items():
-            # Check if tunable element is another algorithm
-            if isinstance(param, dict) and len(param) == 1:
-                subalgo_type = list(param)[0]
-                subalgo_kwargs = param[subalgo_type]
-                if isinstance(subalgo_kwargs, dict):
-                    param = OptimizationAlgorithm(subalgo_type,
-                                                  space, **subalgo_kwargs)
-            elif isinstance(param, str) and \
-                    param.lower() in OptimizationAlgorithm.typenames:
-                # pylint: disable=too-many-function-args
-                param = OptimizationAlgorithm(param, space)
-            elif varname == 'seed':
-                self.seed_rng(param)
+        self._param_names = ['seed'] + list(kwargs.keys())
 
-            setattr(self, varname, param)
+        super(BaseAlgorithm, self).__init__(space, seed=seed, **kwargs)
+
+        self.seed_rng(seed)
 
     def seed_rng(self, seed):
         """Seed the state of the random number generator.
@@ -244,11 +233,111 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
                 attr.space = space_
 
 
-# pylint: disable=too-few-public-methods,abstract-method
-class OptimizationAlgorithm(BaseAlgorithm, metaclass=Factory):
-    """Class used to inject dependency on an algorithm implementation.
+class PrimaryAlgo(Wrapper):
+    """Perform checks on points and transformations. Wrap the primary algorithm.
 
-    .. seealso:: `orion.core.utils.Factory` metaclass and `BaseAlgorithm` interface.
+    1. Checks requirements on the parameter space from algorithms and create the
+    appropriate transformations. Apply transformations before and after methods
+    of the primary algorithm.
+    2. Checks whether incoming and outcoming points are compliant with a space.
+
     """
 
-    pass
+    implementation_module = "orion.algo"
+
+    def __init__(self, space, algorithm_config):
+        """
+        Initialize the primary algorithm.
+
+        Parameters
+        ----------
+        space : `orion.algo.space.Space`
+           The original definition of a problem's parameters space.
+        algorithm_config : dict
+           Configuration for the algorithm.
+
+        """
+        self._space = space
+        super(PrimaryAlgo, self).__init__(space, instance=algorithm_config)
+        requirements = self.instance.requires
+        self.transformed_space = build_required_space(requirements, self.space)
+        self.instance.space = self.transformed_space
+
+    @property
+    def wraps(self):
+        """Return the type of object this wrapper wraps"""
+        return BaseAlgorithm
+
+    def seed_rng(self, seed):
+        """Seed the state of the algorithm's random number generator."""
+        self.instance.seed_rng(seed)
+
+    def suggest(self, num=1):
+        """Suggest a `num` of new sets of parameters.
+
+        :param num: how many sets to be suggested.
+
+        .. note:: New parameters must be compliant with the problem's domain
+           `orion.algo.space.Space`.
+
+        """
+        points = self.instance.suggest(num)
+        for point in points:
+            assert point in self.transformed_space
+        return [self.transformed_space.reverse(point) for point in points]
+
+    def observe(self, points, results):
+        """Observe evaluation `results` corresponding to list of `points` in
+        space.
+        .. seealso:: `orion.algo.base.BaseAlgorithm.observe`
+        """
+        assert len(points) == len(results)
+        tpoints = []
+        for point in points:
+            assert point in self.space
+            tpoints.append(self.transformed_space.transform(point))
+        self.instance.observe(tpoints, results)
+
+    @property
+    def is_done(self):
+        """Return True, if an algorithm holds that there can be no further improvement."""
+        return self.instance.is_done
+
+    def score(self, point):
+        """Allow algorithm to evaluate `point` based on a prediction about
+        this parameter set's performance. Return a subjective measure of expected
+        performance.
+        By default, return the same score any parameter (no preference).
+        """
+        assert point in self.space
+        return self.instance.score(self.transformed_space.transform(point))
+
+    def judge(self, point, measurements):
+        """Inform an algorithm about online `measurements` of a running trial.
+        The algorithm can return a dictionary of data which will be provided
+        as a response to the running environment. Default is None response.
+        """
+        assert point in self._space
+        return self.instance.judge(self.transformed_space.transform(point), measurements)
+
+    @property
+    def should_suspend(self):
+        """Allow algorithm to decide whether a particular running trial is still
+        worth to complete its evaluation, based on information provided by the
+        `judge` method.
+        """
+        return self.instance.should_suspend
+
+    @property
+    def configuration(self):
+        """Return tunable elements of this algorithm in a dictionary form
+        appropriate for saving.
+        """
+        return self.instance.configuration
+
+    @property
+    def space(self):
+        """Domain of problem associated with this algorithm's instance.
+        .. note:: Redefining property here without setter, denies base class' setter.
+        """
+        return self._space

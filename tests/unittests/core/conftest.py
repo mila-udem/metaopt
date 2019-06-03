@@ -11,6 +11,7 @@ import pytest
 from orion.algo.space import (Categorical, Integer, Real, Space)
 from orion.core.evc import conflicts
 from orion.core.io.convert import (JSONConverter, YAMLConverter)
+from orion.core.io.database import Database
 from orion.core.io.space_builder import DimensionBuilder
 from orion.core.worker.experiment import Experiment
 
@@ -19,6 +20,14 @@ TEST_DIR = os.path.dirname(os.path.abspath(__file__))
 YAML_SAMPLE = os.path.join(TEST_DIR, 'sample_config.yml')
 JSON_SAMPLE = os.path.join(TEST_DIR, 'sample_config.json')
 UNKNOWN_SAMPLE = os.path.join(TEST_DIR, 'sample_config.txt')
+
+
+@pytest.fixture()
+def create_db_instance(null_db_instances, clean_db):
+    """Create and save a singleton database instance."""
+    database = Database('MongoDB', name='orion_test',
+                        username='user', password='pass')
+    return database
 
 
 @pytest.fixture(scope='session')
@@ -114,6 +123,11 @@ def hacked_exp(with_user_dendi, random_dt, clean_db, create_db_instance):
     """Return an `Experiment` instance with hacked _id to find trials in
     fake database.
     """
+    try:
+        Database(of_type=('orion.core.io.database.mongodb', 'MongoDB'), name='orion_test',
+                 username='user', password='pass')
+    except (TypeError, ValueError):
+        pass
     exp = Experiment('supernaedo2')
     exp._id = 'supernaedo2'  # white box hack
     return exp

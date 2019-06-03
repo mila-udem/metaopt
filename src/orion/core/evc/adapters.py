@@ -863,7 +863,10 @@ class Adapter(BaseAdapter, metaclass=Factory):
             if isinstance(adapter_dict, (list, tuple)):
                 adapter = Adapter.build(adapter_dict)
             else:
-                adapter = cls(**adapter_dict)
+                new_adapter_dict = copy.deepcopy(adapter_dict)
+                new_adapter_dict['of_type'] = ('orion.core.evc.adapters',
+                                               new_adapter_dict['of_type'])
+                adapter = cls(**new_adapter_dict)
             adapters.append(adapter)
 
         return CompositeAdapter(*adapters)

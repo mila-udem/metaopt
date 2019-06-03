@@ -11,7 +11,7 @@
 from abc import (ABCMeta, abstractmethod)
 import logging
 
-from orion.core.utils import Factory
+from orion.core.utils import Concept, Wrapper
 from orion.core.worker.trial import Trial
 
 log = logging.getLogger(__name__)
@@ -36,8 +36,16 @@ def get_objective(trial):
     return objective
 
 
-class BaseParallelStrategy(object, metaclass=ABCMeta):
+class BaseParallelStrategy(Concept, metaclass=ABCMeta):
     """Strategy to give intermediate results for incomplete trials"""
+
+    requires = []
+    name = "Strategy"
+    implementation_module = 'orion.core.worker.strategy'
+
+    def __init__(self, **kwargs):
+        """Initialize a Strategy"""
+        super(BaseParallelStrategy, self).__init__(**kwargs)
 
     @abstractmethod
     def observe(self, points, results):
@@ -74,6 +82,25 @@ class BaseParallelStrategy(object, metaclass=ABCMeta):
         return self.__class__.__name__
 
 
+# pylint: disable=too-few-public-methods,abstract-method
+class Strategy(Wrapper):
+    """Class used to build a parallel strategy given name and params
+
+    .. seealso:: `orion.core.utils.Factory` metaclass and `BaseParallelStrategy` interface.
+    """
+
+    implementation_module = 'orion.core.worker.strategy'
+
+    def __init__(self, strategy_config):
+        """Initialize wrapper for strategies"""
+        super(Strategy, self).__init__(instance=strategy_config)
+
+    @property
+    def wraps(self):
+        """Wrap `BaeParallelStrategy`"""
+        return BaseParallelStrategy
+
+
 class NoParallelStrategy(BaseParallelStrategy):
     """No parallel strategy"""
 
@@ -92,6 +119,7 @@ class MaxParallelStrategy(BaseParallelStrategy):
     def __init__(self, default_result=float('inf')):
         """Initialize the maximum result used to lie"""
         self.max_result = default_result
+        super(MaxParallelStrategy, self).__init__(default_result=default_result)
 
     def observe(self, points, results):
         """See BaseParallelStrategy.observe"""
@@ -113,6 +141,7 @@ class MeanParallelStrategy(BaseParallelStrategy):
     def __init__(self, default_result=float('inf')):
         """Initialize the mean result used to lie"""
         self.mean_result = default_result
+        super(MeanParallelStrategy, self).__init__(default_result=default_result)
 
     def observe(self, points, results):
         """See BaseParallelStrategy.observe"""
@@ -127,13 +156,3 @@ class MeanParallelStrategy(BaseParallelStrategy):
             raise RuntimeError("Trial {} is completed but should not be.".format(trial.id))
 
         return Trial.Result(name='lie', type='lie', value=self.mean_result)
-
-
-# pylint: disable=too-few-public-methods,abstract-method
-class Strategy(BaseParallelStrategy, metaclass=Factory):
-    """Class used to build a parallel strategy given name and params
-
-    .. seealso:: `orion.core.utils.Factory` metaclass and `BaseParallelStrategy` interface.
-    """
-
-    pass

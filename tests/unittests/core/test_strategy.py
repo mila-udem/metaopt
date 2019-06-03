@@ -30,12 +30,12 @@ class TestStrategyFactory:
 
     def test_create_noparallel(self):
         """Test creating a NoParallelStrategy class"""
-        strategy = Strategy('NoParallelStrategy')
+        strategy = Strategy({'NoParallelStrategy': {}}).instance
         assert isinstance(strategy, NoParallelStrategy)
 
     def test_create_meanparallel(self):
         """Test creating a MeanParallelStrategy class"""
-        strategy = Strategy('MeanParallelStrategy')
+        strategy = Strategy({'MeanParallelStrategy': {}}).instance
         assert isinstance(strategy, MeanParallelStrategy)
 
 
