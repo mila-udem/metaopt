@@ -1,4 +1,9 @@
 sphinx
 sphinx_rtd_theme
 sphinxcontrib.httpdomain
+sphinx-autoapi
+sphinx_gallery
 numpydoc
+plotly
+matplotlib
+kaleido

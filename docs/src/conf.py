@@ -42,18 +42,21 @@ import orion.core as orion  # noqa
 # If your documentation needs a minimal Sphinx version, state it here.
 # needs_sphinx = '1.0'
 
-extensions = [  # Extensions must be sorted alphabetically to ease maintenance and merges.
-    "numpydoc",
-    "sphinxcontrib.httpdomain",  # Documentation directives for the REST API.
-    "sphinx.ext.autodoc",
-    "sphinx.ext.autosummary",
-    "sphinx.ext.coverage",
-    "sphinx.ext.doctest",
-    "sphinx.ext.extlinks",
-    "sphinx.ext.todo",
-    "sphinx.ext.viewcode",
-    "sphinx.ext.intersphinx",
-]
+extensions = (
+    [  # Extensions must be sorted alphabetically to ease maintenance and merges.
+        "numpydoc",
+        "sphinxcontrib.httpdomain",  # Documentation directives for the REST API.
+        "sphinx_gallery.gen_gallery",
+        "sphinx.ext.autodoc",
+        "sphinx.ext.autosummary",
+        "sphinx.ext.coverage",
+        "sphinx.ext.doctest",
+        "sphinx.ext.extlinks",
+        "sphinx.ext.todo",
+        "sphinx.ext.viewcode",
+        "sphinx.ext.intersphinx",
+    ]
+)
 
 # General information about the project.
 project = u"orion"
@@ -209,6 +212,35 @@ texinfo_documents = [
 
 autodoc_mock_imports = ["_version", "utils._appdirs"]
 
+# -- Gallery configuration -----------------------------------------------
+
+import plotly.io as pio
+
+pio.renderers.default = "sphinx_gallery"
+
+from plotly.io._sg_scraper import plotly_sg_scraper
+
+image_scrapers = (
+    "matplotlib",
+    plotly_sg_scraper,
+)
+
+import sphinx_gallery.sorting
+
+sphinx_gallery_conf = {
+    # "doc_module": ("plotly",),
+    "backreferences_dir": "gen_modules/backreferences",
+    "reference_url": {
+        "sphinx_gallery": None,
+    },
+    "examples_dirs": "../../examples/plotting",  # path to your example scripts
+    "gallery_dirs": "auto_examples",  # path to your example scripts
+    "image_scrapers": image_scrapers,
+    # "compress_images": ("images", "thumbnails"),
+    "matplotlib_animations": True,
+    "ignore_pattern": "python_example.py",
+    "within_subsection_order": sphinx_gallery.sorting.FileNameSortKey,
+}
 
 # -- intersphinx configuration ------------------------------------------
 

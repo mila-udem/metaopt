@@ -19,6 +19,7 @@
    user/algorithms
    user/searchspace
    user/monitoring
+   auto_examples/index
    user/evc
    user/storage
    user/config
