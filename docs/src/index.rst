@@ -44,6 +44,16 @@
    plugins/algorithms
 
 .. toctree::
+   :maxdepth: 2
+   :caption: API Reference
+
+   code/algo
+   code/client
+   code/core
+   code/plotting
+   code/storage
+
+.. toctree::
    :caption: Developer Guide
    :maxdepth: 1
 
@@ -54,15 +64,5 @@
    developer/documenting
    developer/ci
    developer/release
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Code Reference
-
-   code/algo
-   code/client
-   code/core
-   code/plotting
-   code/storage
 
 .. Don't fetch reference/viz
