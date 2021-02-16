@@ -95,7 +95,12 @@ templates_path = ["_templates"]
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This patterns also effect to html_static_path and html_extra_path
-exclude_patterns = ["_build", "_templates", "**/pptree.py"]
+exclude_patterns = [
+    "_build",
+    "_templates",
+    "**/pptree.py",
+    "user/visualizations.rst",
+]
 
 # The name of the Pygments (syntax highlighting) style to use.
 highlight_language = "python3"
@@ -233,13 +238,14 @@ sphinx_gallery_conf = {
     "reference_url": {
         "sphinx_gallery": None,
     },
-    "examples_dirs": "../../examples/plotting",  # path to your example scripts
-    "gallery_dirs": "auto_examples",  # path to your example scripts
+    "examples_dirs": ["../../examples/plotting", "../../examples/tutorials"],
+    "gallery_dirs": ["auto_examples", "auto_tutorials"],
     "image_scrapers": image_scrapers,
     # "compress_images": ("images", "thumbnails"),
     "matplotlib_animations": True,
     "ignore_pattern": "python_example.py",
     "within_subsection_order": sphinx_gallery.sorting.FileNameSortKey,
+    "remove_config_comments": True,
 }
 
 # -- intersphinx configuration ------------------------------------------
@@ -291,7 +297,8 @@ nitpick_ignore = [("py:obj", attr) for attr in ignore_algo_attr]
 ################################################################################
 
 # sphinx.ext.autosummary will automatically be loaded as well. So:
-autosummary_generate = glob.glob("reference/*.rst")
+# autosummary_generate = True
+# autosummary_generate = glob.glob("reference/*.rst")
 
 # Generate ``plot::`` for ``Examples`` sections which contain matplotlib
 numpydoc_use_plots = False

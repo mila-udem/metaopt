@@ -1,3 +1,5 @@
+.. _visualizations:
+
 Visualizations
 ==============
 
@@ -16,4 +18,4 @@ runs. These tools will help you:
 Examples
 --------
 
-Detailed examples of the different type of visualizations, how use and interpret them.
+Detailed examples of the different type of visualizations, how to use and interpret them.
