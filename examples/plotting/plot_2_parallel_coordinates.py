@@ -28,8 +28,6 @@ experiment = get_experiment("2-dim-exp", storage=storage)
 fig = experiment.plot.parallel_coordinates()
 fig
 
-# TODO: Change dropout values to (0, 1) (ex: 5 -> 0.5)
-
 #%%
 # In this basic example the parallel coordinates plot is marginally useful as there are only
 # 2 dimensions. It is possible however to identify the best performing values of ``dropout`` and
@@ -39,7 +37,6 @@ fig
 # .. image:: ../_static/parallel_coordinates_select.gif
 #     :width: 600
 #     :align: center
-#
 #
 # .. note::
 #
