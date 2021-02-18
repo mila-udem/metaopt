@@ -68,6 +68,16 @@ fig
 #
 
 #%%
+# We can also select a subset of hyperparameters to help with the visualization.
+
+# Load the data for the specified experiment
+fig = experiment.plot.parallel_coordinates(
+    order=["epochs", "learning_rate", "weight_decay"]
+)
+fig
+
+
+#%%
 #
 # Special cases
 # -------------
@@ -91,7 +101,8 @@ experiment = get_experiment("2-dim-shape-exp", storage=storage)
 fig = experiment.plot.parallel_coordinates()
 fig
 
-#%% In the example above, the dimension ``learning_rate~loguniform(1e-5, 1e-2, shape=3)``
+#%% 
+# In the example above, the dimension ``learning_rate~loguniform(1e-5, 1e-2, shape=3)``
 # is flattened and represented with ``learning_rate[i]``. If the shape would be or more dimensions
 # (ex: ``(3, 2)``), the indices would be ``learning_rate[i,j]`` with i=0..2 and j=0..1.
 
