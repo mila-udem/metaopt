@@ -60,10 +60,6 @@ experiment.plot.lpi()
 # There is a large difference here between the most important hyperparameter (learning rate) and the
 # least important one (gamma).
 #
-# .. TODO::
-#
-#     Rewrite based on new results.
-#
 # One caveat of LPI is that the variance for each hyperparameters depends on the search space.
 # If the prior for one hyperparameter is narrow and fits the region of best values for this
 # hyperparameter, then the variance will be low and this hyperparameter will be considered
@@ -71,9 +67,12 @@ experiment.plot.lpi()
 # search space. Another related issue, is that if one hyperparameter have a dramatic effect, it will
 # lead to a variance so large that the other hyperparameters will seem unrelevant in comparison.
 # This is what we observe here with the learning rate. If we branche from the experiment and define
-# a narrowed search space, we will see that the momentum emerges as an important hyperparameter.
+# a narrowed prior for the learning rate, we will see that it becomes an unimportant
+# hyperparameter.
 # See documentation on :ref:`EVC system` for more information on branching, or
 # :py:func:`orion.client.build_experiment` for informations on ``branching`` arguments.
+# Original learning rate prior was ``loguniform(1e-5, 0.1)``. We will narrow it to
+# ``loguniform(1e-3, 0.1)``.
 
 from orion.client import build_experiment
 
@@ -83,9 +82,9 @@ experiment = build_experiment(
     branching={"branch_from": "hyperband-cifar10"},
     space={
         "epochs": "fidelity(1, 120, base=4)",
-        "learning_rate": "loguniform(1e-5, 1e-4)",
-        "momentum": "uniform(0.5, 0.9)",
-        "weight_decay": "loguniform(1e-10, 1e-8)",
+        "learning_rate": "loguniform(1e-3, 0.1)",
+        "momentum": "uniform(0, 0.9)",
+        "weight_decay": "loguniform(1e-10, 1e-2)",
         "gamma": "loguniform(0.97, 1)",
     },
     storage=storage,
@@ -94,12 +93,12 @@ experiment = build_experiment(
 experiment.plot.lpi()
 
 #%%
-# We can see that when narrowing close to optimal learning rate, the momentum becomes the most
-# critical hyperparameter to optimize. You may also note that the standard deviation of the LPI is
-# much higher now. This is not due to the narrower search space per say. Because we branched and
-# narrowed the search space, the child experiment ``narrow-hyperband-cifar10`` only has access to
-# trials from ``hyperband-cifar10`` that fits within this narrower search space. This means the
-# regression model was trained on significantly less data and thus less robust to initial states.
+# The prior of the learning rate is arguably large, spanning over 3 orders of magnitude
+# `(0.001, 0.1)`. Nevertheless, for this problem, most learning rates within this range
+# leads to optimal results whenever the other hyperparameters are optimal. What you must remember
+# is that defining to narrow search spaces may lead to misleading local parameter importance.
+# See :ref:`sphx_glr_auto_examples_plot_4_partial_dependencies.py` for a visualization to verify if
+# the search space you defined may be too narrow.
 #
 # Special cases
 # -------------
