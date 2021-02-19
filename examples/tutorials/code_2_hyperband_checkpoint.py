@@ -122,7 +122,7 @@ def resume_from_checkpoint(checkpoint, model, optimizer, lr_scheduler):
 # Training loop for one epoch.
 
 
-def train(loader, device, model, optimizer, criterion):
+def train(loader, device, model, optimizer, lr_scheduler, criterion):
     model.train()
     for batch_idx, (inputs, targets) in enumerate(loader):
         inputs, targets = inputs.to(device), targets.to(device)
@@ -131,6 +131,7 @@ def train(loader, device, model, optimizer, criterion):
         loss = criterion(outputs, targets)
         loss.backward()
         optimizer.step()
+        lr_scheduler.step()
 
 
 #%%
@@ -195,7 +196,7 @@ def main(
 
     for epoch in range(start_epoch, epochs + 1):
         print("epoch", epoch)
-        train(train_loader, device, model, optimizer, criterion)
+        train(train_loader, device, model, optimizer, lr_scheduler, criterion)
         valid_acc = valid(valid_loader, device, model)
         save_checkpoint(checkpoint, model, optimizer, lr_scheduler, epoch)
 
