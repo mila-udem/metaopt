@@ -101,10 +101,23 @@ experiment = get_experiment("2-dim-shape-exp", storage=storage)
 fig = experiment.plot.parallel_coordinates()
 fig
 
-#%% 
+#%%
 # In the example above, the dimension ``learning_rate~loguniform(1e-5, 1e-2, shape=3)``
 # is flattened and represented with ``learning_rate[i]``. If the shape would be or more dimensions
 # (ex: ``(3, 2)``), the indices would be ``learning_rate[i,j]`` with i=0..2 and j=0..1.
+
+#%%
+# The flattened hyperparameters can be fully selected with ``params=['<name>']``.
+#
+
+experiment.plot.parallel_coordinates(order=["/learning_rate"])
+
+#%%
+# Or a subset of the flattened hyperparameters can be selected with ``params=['<name>[index]']``.
+#
+
+experiment.plot.parallel_coordinates(order=["/learning_rate[0]", "/learning_rate[1]"])
+
 
 #%%
 # Categorical dimension
