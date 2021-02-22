@@ -1,4 +1,5 @@
 import argparse
+import glob
 import os
 import shutil
 import subprocess
@@ -20,14 +21,22 @@ MAIN_DB_HOST = f"{EXAMPLE_DIR}/db.pkl"
 BASE_DB_HOST = f"{EXAMPLE_DIR}/base_db.pkl"
 TMP_DB_HOST = f"{EXAMPLE_DIR}/tmp.pkl"
 
+custom_plots = {
+    "hyperband-cifar10": {
+        "name": "params",
+        "kwargs": {
+            "kind": "partial_dependencies",
+            "params": ["gamma", "learning_rate"],
+        },
+    },
+}
 
 # CP base db to database.pkl (overwrite database.pkl)
 
-names = {
-    "code_1_python_api": ["random-rosenbrock", "tpe-rosenbrock"],
-    # "code_2_computation_time": ["tpe-cifar10-comp-time"],
-    "code_2_hyperband_checkpoint": ["hyperband-cifar10"],
-}
+CODE_PATH = f"{EXAMPLE_DIR}/tutorials/{{example}}.py"
+
+paths = glob.glob(CODE_PATH.format(example="code_*"))
+names = sorted(os.path.splitext(os.path.basename(path))[0] for path in paths)
 
 
 def execute(example):
@@ -74,12 +83,14 @@ def setup_tmp_storage(host):
 def load_data(host):
     print("Loading data from", host)
     storage = setup_tmp_storage(host)
+    experiment_names = set()
     data = {"experiments": {}, "trials": {}}
     for experiment in storage.fetch_experiments({}):
         data["experiments"][experiment["_id"]] = experiment
         data["trials"][experiment["_id"]] = storage.fetch_trials(uid=experiment["_id"])
+        experiment_names.add((experiment["name"], experiment["version"]))
 
-    return data
+    return experiment_names, data
 
 
 def copy_data(data, host=TMP_DB_HOST):
@@ -100,29 +111,37 @@ def plot_exps(experiment_names, host=TMP_DB_HOST):
     print("Plotting experiments from", host)
     storage = setup_tmp_storage(host)
     # Plot exps
-    for experiment_name in experiment_names:
-        print("   ", experiment_name)
-        experiment = get_experiment(experiment_name)
+    for experiment_name, version in experiment_names:
+        print(f"   {experiment_name}-v{version}")
+        experiment = get_experiment(experiment_name, version=version)
         for plot in ["regret", "lpi", "partial_dependencies", "parallel_coordinates"]:
             experiment.plot(kind=plot).write_html(
                 f"_static/{experiment.name}_{plot}.html"
             )
 
+        if experiment_name in custom_plots:
+            custom_plot = custom_plots[experiment_name]
+            kwargs = custom_plot["kwargs"]
+            name = (
+                f"_static/{experiment.name}_{kwargs['kind']}_{custom_plot['name']}.html"
+            )
+            experiment.plot(**kwargs).write_html(name)
+
 
 def main(argv=None):
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("examples", nargs="*", choices=names.keys())
+    parser.add_argument("examples", nargs="*", default=[], choices=names + [[]])
     options = parser.parse_args(argv)
 
     if options.examples:
         run = {name for name in options.examples if name in names}
     else:
-        run = set(names.keys())
+        run = set()
 
     prepare_dbs()
 
-    for example, example_experiments in names.items():
+    for example in names:
 
         example_db_host = f"{EXAMPLE_DIR}/{example}_db.pkl"
 
@@ -131,9 +150,11 @@ def main(argv=None):
             print("Moving", MAIN_DB_HOST, "->", example_db_host)
             os.rename(MAIN_DB_HOST, example_db_host)
 
-        data = load_data(example_db_host)
+        experiment_names, data = load_data(example_db_host)
         copy_data(data, TMP_DB_HOST)
-        plot_exps(example_experiments, TMP_DB_HOST)
+
+        if example in run:
+            plot_exps(experiment_names, TMP_DB_HOST)
 
     print("Moving", TMP_DB_HOST, "->", MAIN_DB_HOST)
     os.rename(TMP_DB_HOST, MAIN_DB_HOST)
