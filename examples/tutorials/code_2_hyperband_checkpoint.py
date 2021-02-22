@@ -31,7 +31,7 @@ following template.
     orion hunt -n <exp name>
         ./your_script.sh --checkpoint '{experiment.working_dir}/{trial.hash_params}'
 
-Your script it reponsible to take this checkpoint path, resume from checkpoints or same 
+Your script it reponsible to take this checkpoint path, resume from checkpoints or same
 checkpoints.
 We will demonstrate below how this can be done with PyTorch, but using Oríon's Python API.
 
@@ -348,7 +348,6 @@ fig.show()
 # .. This file is produced by docs/scripts/build_database_and_plots.py
 #
 # .. raw:: html
-#
 #     :file: ../_static/hyperband-cifar10_regret.html
 #
 #
