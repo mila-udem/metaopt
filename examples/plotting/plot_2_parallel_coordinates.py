@@ -17,6 +17,12 @@ the data. Additionaly, the lines are plotted with graded colors based on the obj
 gradation is shown in a color bar on the right of the plot. Note that the objectives are added
 as the last axis is the plot as well.
 
+.. autofunction:: orion.plotting.base.parallel_coordinates
+    :noindex:
+
+The parallel coordinates plot can be executed directly from the ``experiment`` with
+``plot.parallel_coordinates()`` as shown in the example below.
+
 """
 from orion.client import get_experiment
 

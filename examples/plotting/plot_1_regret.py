@@ -13,6 +13,9 @@ objective. An equivalent way to visualize it is using the cumulative minimums in
 differences. Oríon plots the cumulative minimums so that the objective can easily be read
 from the y-axis.
 
+.. autofunction:: orion.plotting.base.regret
+    :noindex:
+
 The regret plot can be executed directly from the ``experiment`` with ``plot.regret()`` as
 shown in the example below.
 

@@ -25,6 +25,12 @@ For a search space of `d` hyperparameters, the partial dependency plot is organi
 separately, while the subplots below the diagonal show the partial dependency between two
 hyperparameters. Let's look at a simple example to make it more concrete.
 
+.. autofunction:: orion.plotting.base.partial_dependencies
+    :noindex:
+
+The partial dependencies plot can be executed directly from the ``experiment`` with
+``plot.partial_dependencies()`` as shown in the example below.
+
 """
 from orion.client import get_experiment
 

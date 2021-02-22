@@ -19,7 +19,11 @@ on the trial history of the experiment, and use it to predict the objective.
 The ratio of variance for one hyperparameter versus the sum of variances for all hyperparameters
 is used as the local parameter importance metric.
 
-Let's see a first example with a simple experiment.
+.. autofunction:: orion.plotting.base.lpi
+    :noindex:
+
+The local parameter importance plot can be executed directly from the ``experiment`` with
+``plot.lpi()`` as shown in the example below.
 
 """
 from orion.client import get_experiment
