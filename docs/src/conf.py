@@ -242,6 +242,7 @@ sphinx_gallery_conf = {
     "gallery_dirs": ["auto_examples", "auto_tutorials"],
     "image_scrapers": image_scrapers,
     # "compress_images": ("images", "thumbnails"),
+    "filename_pattern": "/plot_",
     "matplotlib_animations": True,
     "ignore_pattern": "python_example.py",
     "within_subsection_order": sphinx_gallery.sorting.FileNameSortKey,
