@@ -29,11 +29,12 @@
    :caption: Tutorials
    :maxdepth: 1
 
-   auto_tutorials/index
    tutorials/scikit-learn
+   auto_tutorials/code_1_python_api
    tutorials/pytorch-mnist
+   auto_tutorials/code_2_hyperband_checkpoint
+   auto_tutorials/code_3_benchmark
    tutorials/cluster
-   tutorials/pytorch_cifar
    tutorials/pytorch_a2c_ppo
 
 .. toctree::
