@@ -6,6 +6,7 @@ Produce and register samples to try
 Suggest new parameter sets which optimize the objective.
 
 """
+from typing import Optional, List
 import copy
 import logging
 import random
@@ -30,7 +31,9 @@ class Producer(object):
 
     """
 
-    def __init__(self, experiment, max_idle_time=None):
+    def __init__(
+        self, experiment, max_idle_time=None, knowledge_base: "KnowledgeBase" = None
+    ):
         """Initialize a producer.
 
         :param experiment: Manager of this experiment, provides convenient
@@ -56,6 +59,10 @@ class Producer(object):
         self.params_hashes = set()
         self.naive_trials_history = None
         self.failure_count = 0
+
+        from warmstart.new_knowledge_base import KnowledgeBase
+
+        self.knowledge_base: Optional[KnowledgeBase] = knowledge_base
 
     @property
     def pool_size(self):
@@ -161,6 +168,29 @@ class Producer(object):
         ones.
         """
         trials = self.experiment.fetch_trials(with_evc_tree=True)
+
+        if self.knowledge_base:
+            # TODO: Dont use the KB when we have enough points in the target task.
+
+            ## Option 1:
+            # Get the trials from other 'similar' experiments.
+            reusable_trials = self.knowledge_base.get_reusable_trials(self.experiment)
+            print("Reusable trials:")
+            for trial in reusable_trials:
+                print(trial)
+
+            ## Option 2:
+
+            from orion.client import ExperimentClient
+            closest_experiment_clients: List[ExperimentClient] = self.knowledge_base.get_closest_experiment_clients(self.experiment)
+
+            print("Closest experiment clients: ")
+            for experiment_client in closest_experiment_clients:
+                print(f"exp client: {experiment_client}")
+                warm_start_trials: List[Trial] = experiment_client.fetch_trials()
+                print(f"Found {len(warm_start_trials)} trials.")
+
+            raise NotImplementedError("TODO: Warm-start the algo, if possible.")
 
         self._update_algorithm(
             [trial for trial in trials if trial.status == "completed"]

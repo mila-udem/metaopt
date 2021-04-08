@@ -55,6 +55,7 @@ def build_experiment(
     heartbeat=None,
     working_dir=None,
     debug=False,
+    knowledge_base: "KnowledgeBase" = None,
 ):
     """Build an experiment to be executable
 
@@ -238,7 +239,7 @@ def build_experiment(
                 "repository."
             ) from e
 
-    producer = Producer(experiment, max_idle_time)
+    producer = Producer(experiment, max_idle_time, knowledge_base=knowledge_base)
 
     return ExperimentClient(experiment, producer, heartbeat)
 

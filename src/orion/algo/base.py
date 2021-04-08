@@ -10,8 +10,10 @@ Algorithm implementations must inherit from `orion.algo.base.OptimizationAlgorit
 import hashlib
 import logging
 from abc import ABCMeta, abstractmethod
-
+from contextlib import contextmanager
 from orion.core.utils import Factory
+from orion.core.worker.trial import Trial
+from typing import List
 
 log = logging.getLogger(__name__)
 
@@ -103,6 +105,7 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
             kwargs,
         )
         self._trials_info = {}  # Stores Unique Trial -> Result
+        self._warm_start_trials = {} # Stores unique warm-star trials and their results
         self._space = space
         self._param_names = list(kwargs.keys())
         # Instantiate tunable parameters of an algorithm
@@ -198,6 +201,44 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
 
             if point_id not in self._trials_info:
                 self._trials_info[point_id] = (point, result)
+
+    def warm_start(self, warm_start_trials: List[Trial]) -> None:
+        with self.warm_start_mode():
+
+            # TODO: Only keep points that fit within our space.
+            usable_trials = [
+                trial for trial in warm_start_trials if trial.params in self.space
+            ]
+
+            # Only keep trials we haven't already warm-started with? Or leave that
+            # responsability to the `observe` method?
+            new_trials = [
+                trial for trial in usable_trials
+                if infer_trial_id(trial) not in self._warm_start_trials
+            ]
+            # TODO: Convert trials to points?
+            from orion.core.utils.format_trials import trial_to_tuple
+            points = [
+                trial_to_tuple(trial, self.space) for trial in new_trials
+            ]
+            results = [
+                trial.objective for trial in new_trials
+            ]
+            self.observe(points, results)
+
+    @contextmanager
+    def warm_start_mode(self):
+        """ TODO: Context manager that prevents the algo from modifying its state
+        while observing points from warm-starting.
+        """
+        trials_info_copy = self._trials_info.copy()
+        yield
+        # Store any new entries into the 'warm start' dict.
+        self._warm_start_trials.update({
+            k: v for k, v in self._trials_info.items() if k not in trials_info_copy
+        })
+        # TODO: Could also maybe restore the "number of used trials"?
+        self._trials_info = trials_info_copy
 
     @property
     def is_done(self):
