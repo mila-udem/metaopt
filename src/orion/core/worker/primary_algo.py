@@ -6,6 +6,8 @@ Sanitizing wrapper of main algorithm
 Performs checks and organizes required transformations of points.
 
 """
+from typing import List
+from orion.core.worker.trial import Trial
 import orion.core.utils.backward as backward
 from orion.algo.base import BaseAlgorithm
 from orion.core.worker.transformer import build_required_space
@@ -94,6 +96,9 @@ Space: {}""".format(
             assert point in self.space
             tpoints.append(self.transformed_space.transform(point))
         self.algorithm.observe(tpoints, results)
+
+    def warm_start(self, warm_start_trials: List[Trial]) -> None:
+        self.algorithm.warm_start(warm_start_trials)
 
     @property
     def unwrapped(self) -> "BaseAlgorithm":

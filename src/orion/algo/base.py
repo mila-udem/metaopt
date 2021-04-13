@@ -208,7 +208,7 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         from orion.core.utils.format_trials import trial_to_tuple
 
         for trial in warm_start_trials:
-            print(trial)
+            # print(trial)
             try:
                 point = trial_to_tuple(trial=trial, space=self.space)
                 if point in self.space:
@@ -233,6 +233,7 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
                 trial.objective for trial in new_trials
             ]
             log.debug(f"About to observe {len(points)} warm-starting points.")
+            print(f"About to observe {len(points)} warm-starting points.")
             self.observe(points, results)
 
     @property
@@ -244,14 +245,19 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         """ TODO: Context manager that prevents the algo from modifying its state
         while observing points from warm-starting.
         """
-        trials_info_copy = self._trials_info.copy()
+        trials_info_copy = self.unwrapped._trials_info.copy()
+        # state_before = self.state_dict()
+        print(f"Entering warm-start mode, with {len(self.unwrapped._warm_start_trials)} warm starting trials and {len(self.unwrapped._trials_info)} 'normal' trials.")
+        print(f"self.is_done? {self.is_done}")
         yield
         # Store any new entries into the 'warm start' dict.
-        self._warm_start_trials.update({
-            k: v for k, v in self._trials_info.items() if k not in trials_info_copy
+        self.unwrapped._warm_start_trials.update({
+            k: v for k, v in self.unwrapped._trials_info.items() if k not in trials_info_copy
         })
+        self.unwrapped._trials_info = trials_info_copy
+        print(f"Exiting warm-start mode, with {len(self.unwrapped._warm_start_trials)} warm starting trials and {len(self.unwrapped._trials_info)} 'normal' trials.")
         # TODO: Could also maybe restore the "number of used trials"?
-        self._trials_info = trials_info_copy
+        print(f"self.is_done? {self.is_done}")
 
     @property
     def is_done(self):
