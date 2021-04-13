@@ -523,6 +523,9 @@ def _instantiate_algo(space, max_trials, config=None, ignore_unavailable=False):
     try:
         algo = PrimaryAlgo(space, config)
         algo.algorithm.max_trials = max_trials
+        # from orion.core.worker.multi_task_algo import MultiTaskAlgo
+        # algo = MultiTaskAlgo(space, config)
+        # algo.unwrapped.max_trials = max_trials
     except NotImplementedError as e:
         if not ignore_unavailable:
             raise e

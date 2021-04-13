@@ -96,6 +96,10 @@ Space: {}""".format(
         self.algorithm.observe(tpoints, results)
 
     @property
+    def unwrapped(self) -> "BaseAlgorithm":
+        return self.algorithm.unwrapped
+
+    @property
     def is_done(self):
         """Return True, if an algorithm holds that there can be no further improvement."""
         return self.algorithm.is_done

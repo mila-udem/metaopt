@@ -203,28 +203,41 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
                 self._trials_info[point_id] = (point, result)
 
     def warm_start(self, warm_start_trials: List[Trial]) -> None:
+        
+        compatible_trials: List[Trial] = []
+        from orion.core.utils.format_trials import trial_to_tuple
+
+        for trial in warm_start_trials:
+            print(trial)
+            try:
+                point = trial_to_tuple(trial=trial, space=self.space)
+                if point in self.space:
+                    compatible_trials.append(trial)
+            except ValueError:
+                log.debug(f"Can't reuse point {point}")
+
         with self.warm_start_mode():
-
             # TODO: Only keep points that fit within our space.
-            usable_trials = [
-                trial for trial in warm_start_trials if trial.params in self.space
-            ]
-
             # Only keep trials we haven't already warm-started with? Or leave that
             # responsability to the `observe` method?
-            new_trials = [
-                trial for trial in usable_trials
-                if infer_trial_id(trial) not in self._warm_start_trials
-            ]
             # TODO: Convert trials to points?
             from orion.core.utils.format_trials import trial_to_tuple
             points = [
-                trial_to_tuple(trial, self.space) for trial in new_trials
+                trial_to_tuple(trial=trial, space=self.space) for trial in compatible_trials
+            ]
+            new_trials = [
+                trial for trial, point in zip(compatible_trials, points)
+                if infer_trial_id(point) not in self._warm_start_trials
             ]
             results = [
                 trial.objective for trial in new_trials
             ]
+            log.debug(f"About to observe {len(points)} warm-starting points.")
             self.observe(points, results)
+
+    @property
+    def unwrapped(self) -> "BaseAlgorithm":
+        return self
 
     @contextmanager
     def warm_start_mode(self):
