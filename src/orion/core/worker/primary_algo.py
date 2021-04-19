@@ -6,11 +6,18 @@ Sanitizing wrapper of main algorithm
 Performs checks and organizes required transformations of points.
 
 """
-from typing import List
+import textwrap
+from typing import List, Dict, Tuple
 from orion.core.worker.trial import Trial
 import orion.core.utils.backward as backward
-from orion.algo.base import BaseAlgorithm
+from orion.algo.base import BaseAlgorithm, infer_trial_id
 from orion.core.worker.transformer import build_required_space
+from orion.algo.space import Space, Categorical
+from orion.core.utils.config import ExperimentInfo
+from orion.core.utils.format_trials import trial_to_tuple
+
+import logging
+log = logging.getLogger(__name__)
 
 
 # pylint: disable=too-many-public-methods
@@ -37,10 +44,44 @@ class PrimaryAlgo(BaseAlgorithm):
 
         """
         self.algorithm = None
-        super(PrimaryAlgo, self).__init__(space, algorithm=algorithm_config)
+        _space_without_task_ids = Space(space.copy())
+        _space_without_task_ids.pop("task_id", None)
+        log.info(f"Creating PrimaryAlgo for space {space}")
+        
+        # TODO: Figure out the number of potential tasks using the KB.
+        # from warmstart.new_knowledge_base import KnowledgeBase
+        # from orion.storage.base import get_storage
+        # kb = KnowledgeBase(get_storage())
+        # if kb.n_stored_experiments == 1:
+        #     use_kb = False
+        max_number_of_tasks = 5
+        task_label_dimension = Categorical(
+            "task_id",
+            list(range(0, max_number_of_tasks)),
+            default_value=0,
+        )
+        # NOTE: Need to pass a space with the `task_id` dimension to __init__, because
+        # this constructor call is what creates the algorithm.
+        # BUG: This space might already contain the `task_id` key, for isntance when
+        # loading from storage?
+        # BUG: For some algos like TPE, it seems like we need to pass the space with
+        # the task IDS to the constructor, while for the random algo we need to NOT pass
+        # it like that, because there's some weird kind of recursion going on.
+        assert "task_id" not in space
+        # Add the task-id to the space so it is used when creating the algorithm inside
+        # super().__init__()
+        space.register(task_label_dimension)
+
+        super().__init__(space, algorithm=algorithm_config)
         requirements = backward.get_algo_requirements(self.algorithm)
         self.transformed_space = build_required_space(self.space, **requirements)
         self.algorithm.space = self.transformed_space
+        self._space = _space_without_task_ids
+        self.current_task_id = 0
+        assert "task_id" not in self._space
+        assert "task_id" not in self.space
+        assert "task_id" in self.transformed_space
+        assert "task_id" in self.algorithm.space
 
     def seed_rng(self, seed):
         """Seed the state of the algorithm's random number generator."""
@@ -67,22 +108,44 @@ class PrimaryAlgo(BaseAlgorithm):
            `orion.algo.space.Space`.
         """
         points = self.algorithm.suggest(num)
-
         if points is None:
             return None
 
+        # Check that the algorithm suggested valid points (with task ids)
         for point in points:
             if point not in self.transformed_space:
-                raise ValueError(
-                    """
-Point is not contained in space:
-Point: {}
-Space: {}""".format(
-                        point, self.transformed_space
+                raise ValueError(textwrap.dedent(f"""\
+                        Point is not contained in space:
+                        Point: {point}
+                        Space: {self.transformed_space}
+                        """
                     )
                 )
 
-        return [self.transformed_space.reverse(point) for point in points]
+        transformed_points = [self.transformed_space.reverse(point) for point in points]
+
+        # Remove the task ids from these points:
+        # NOTE: These predicted task ids aren't currently used.
+        points_without_task_ids, _ = zip(*[
+            (point[:-1], point[-1]) for point in transformed_points
+        ])
+
+        for point in points_without_task_ids:
+            if point not in self.space:
+                raise ValueError(
+                    textwrap.dedent(f"""\
+                        Point is not contained in space:
+                        Point: {point}
+                        Space: {self.space}
+                        """
+                    )
+                )
+        # Convert length-1 tuples into a single value?
+        points_without_task_ids = [
+            point[0] if len(point) == 1 else point for point in points_without_task_ids
+        ]
+        # assert False, points_without_task_ids
+        return points_without_task_ids
 
     def observe(self, points, results):
         """Observe evaluation `results` corresponding to list of `points` in
@@ -92,13 +155,63 @@ Space: {}""".format(
         """
         assert len(points) == len(results)
         tpoints = []
+        # Add the task ids to the points, because we assume that the points passed to
+        # `observe` are from the current task.
+        points = [point + (self.current_task_id,) for point in points]
+
         for point in points:
             assert point in self.space
             tpoints.append(self.transformed_space.transform(point))
         self.algorithm.observe(tpoints, results)
 
-    def warm_start(self, warm_start_trials: List[Trial]) -> None:
-        self.algorithm.warm_start(warm_start_trials)
+    def warm_start(self, warm_start_trials: Dict[ExperimentInfo, List[Trial]]) -> None:
+        # Being asked to warm-start the algorithm.
+        log.debug(f"Warm starting the algo with trials {warm_start_trials}")
+        try:
+            self.algorithm.warm_start(warm_start_trials)
+        except NotImplementedError:
+            # Perform warm-starting using only the supported trials.
+            log.info("Will warm-start using contextual information, since the algo "
+                     "isn't warm-starteable.")
+        else:
+            # Algo was successfully warm-started, return.
+            log.info("Algorithm was successfully warm-started, returning.")
+            return
+
+        compatible_trials: List[Trial] = []
+        compatible_points: List[Tuple] = []
+
+        for i, (experiment_info, trials) in enumerate(warm_start_trials.items()):
+            # exp_space = experiment_info.space
+            # from warmstart.utils.api_config import hparam_class_from_orion_space_dict
+            # exp_hparam_class = hparam_class_from_orion_space_dict(exp_space)
+            log.debug(f"Experiment {experiment_info.name} has {len(trials)} trials.")
+
+            for trial in trials:
+                try:
+                    point = trial_to_tuple(trial=trial, space=self.space)
+                    # Drop the point if it doesn't fit inside the current space.
+                    # TODO: Do we want to 'translate' the point in this case?
+                    if point not in self.space:
+                        continue
+                    # Add the task id to the point:
+                    point = point + (i,)
+                    compatible_trials.append(trial)
+                    compatible_points.append(point)
+                except ValueError as e:
+                    log.error(f"Can't reuse trial {trial}: {e}")
+
+        with self.warm_start_mode():
+            # Only keep trials that are new.
+            new_trials, new_points = zip(*[
+                (trial, point) for trial, point in zip(compatible_trials, compatible_points)
+                if infer_trial_id(point) not in self._warm_start_trials
+            ])
+            results = [
+                trial.objective for trial in new_trials
+            ]
+            log.info(f"About to observe {len(new_points)} warm-starting points!")
+            self.algorithm.observe(new_points, results)
 
     @property
     def unwrapped(self) -> "BaseAlgorithm":

@@ -21,27 +21,23 @@ class MultiTaskAlgo(BaseAlgorithm):
     """
 
     def __init__(self, space: Space, algorithm_config: Dict):
-        print(f"Creating a MultiTaskAlgo wrapper around space {space}, algo config: {algorithm_config}")
+        print(f"Creating a MultiTaskAlgo wrapper: space {space}, algo config: {algorithm_config}")
         super().__init__(space)
+
+        # Transform the input space, adding in a "task_id" dimension
         self.transformed_space = copy.deepcopy(space)
-        todo = 1234  # Need to determine the max number of tasks (using the KB) 
-        task_label_dimension = Integer(name="task_id", prior="uniform", low=0, high=todo)
-        # BUG: How come the space can sometimes already have the task id?
+        # TODO: Need to determine the max number of tasks (using the KB?)
+        task_label_dimension = Integer(name="task_id", prior="uniform", low=0, high=123)
         assert "task_id" not in self.space
         assert "task_id" not in self.transformed_space
         self.transformed_space.register(task_label_dimension)
 
-        # Pass the 'transformed space' to the PrimaryAlgo
+        # Pass the transformed space to the PrimaryAlgo
         self.algorithm = PrimaryAlgo(self.transformed_space, algorithm_config)  # <----- Crash!
         self.warm_started: bool = False
         self.current_task_id: int = 0
 
-        # self.knowledge_base: KnowledgeBase = KnowledgeBase()
-        # try:
-        #     self.knowledge_base.add_storage(get_storage())
-        # except:
-        #     pass
-
+        # self.knowledge_base = KnowledgeBase()
         # if self.knowledge_base.n_stored_experiments:
         #     # TODO: Fetch the current experiment, pass it to the knowledge base, and
         #     # obtain the reusable trials, and whenever possible use them to warm-start
@@ -83,14 +79,11 @@ class MultiTaskAlgo(BaseAlgorithm):
                 print(f"Can't reuse point {point}")
 
         with self.warm_start_mode():
-            # TODO: Only keep points that fit within our space.
-            # Only keep trials we haven't already warm-started with? Or leave that
-            # responsability to the `observe` method?
-            # TODO: Convert trials to points?
             from orion.core.utils.format_trials import trial_to_tuple
             points = [
                 trial_to_tuple(trial=trial, space=self.space) for trial in compatible_trials
             ]
+            # Add the task ids to each point:
             new_trials = [
                 trial for trial, point in zip(compatible_trials, points)
                 if infer_trial_id(point) not in self._warm_start_trials

@@ -12,8 +12,10 @@ import logging
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from orion.core.utils import Factory
+from orion.core.utils.format_trials import trial_to_tuple
+from orion.core.utils.config import ExperimentInfo
 from orion.core.worker.trial import Trial
-from typing import List
+from typing import List, Dict
 
 log = logging.getLogger(__name__)
 
@@ -93,7 +95,7 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
        Technical Report SFI-TR-95-02-010, Santa Fe Institute, 1995.
 
     """
-
+    DONT_RECURSE_PLEASE: bool = False
     requires_type = None
     requires_shape = None
     requires_dist = None
@@ -111,11 +113,16 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         # Instantiate tunable parameters of an algorithm
         for varname, param in kwargs.items():
             # Check if tunable element is another algorithm
+            if type(self).DONT_RECURSE_PLEASE:
+                continue
             if isinstance(param, dict) and len(param) == 1:
                 subalgo_type = list(param)[0]
                 subalgo_kwargs = param[subalgo_type]
+                log.info(f"calling OptimizationAlgorithm for subalgo of type {subalgo_type}")
+                type(self).DONT_RECURSE_PLEASE = True
                 if isinstance(subalgo_kwargs, dict):
                     param = OptimizationAlgorithm(subalgo_type, space, **subalgo_kwargs)
+                type(self).DONT_RECURSE_PLEASE = False
             elif (
                 isinstance(param, str)
                 and param.lower() in OptimizationAlgorithm.typenames
@@ -198,30 +205,34 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         """
         for point, result in zip(points, results):
             point_id = infer_trial_id(point)
-
             if point_id not in self._trials_info:
+                # print(f"Observing new point {point} with id {point_id}")
                 self._trials_info[point_id] = (point, result)
+            # else:
+            #     print(f"Point point {point} with id {point_id} isn't new.")
 
-    def warm_start(self, warm_start_trials: List[Trial]) -> None:
-        
+    def warm_start(self, warm_start_trials: Dict[ExperimentInfo, List[Trial]]) -> None:
+        """ WIP: Use the given trials to warm-start the algorithm.
+
+        This by default observes all points that fit within the current space.
+        """
+        raise NotImplementedError(f"Algorithm of type {type(self)} isn't warm-starteable yet.")
         compatible_trials: List[Trial] = []
-        from orion.core.utils.format_trials import trial_to_tuple
+        task_ids: List[int] = []
 
+        # NOTE: Only keep points that fit within our space.
         for trial in warm_start_trials:
-            # print(trial)
             try:
                 point = trial_to_tuple(trial=trial, space=self.space)
                 if point in self.space:
                     compatible_trials.append(trial)
-            except ValueError:
-                log.debug(f"Can't reuse point {point}")
+            except ValueError as e:
+                print(f"Can't reuse trial {trial}: {e}")
 
         with self.warm_start_mode():
-            # TODO: Only keep points that fit within our space.
             # Only keep trials we haven't already warm-started with? Or leave that
             # responsability to the `observe` method?
-            # TODO: Convert trials to points?
-            from orion.core.utils.format_trials import trial_to_tuple
+            # Only keep the trials we haven't warm-started with before:
             points = [
                 trial_to_tuple(trial=trial, space=self.space) for trial in compatible_trials
             ]
@@ -229,12 +240,19 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
                 trial for trial, point in zip(compatible_trials, points)
                 if infer_trial_id(point) not in self._warm_start_trials
             ]
-            results = [
+            # TODO: Add the task ids here
+            kb_points = [
+                trial_to_tuple(trial=trial, space=self.space) for trial in new_trials
+            ]
+            kb_results = [
                 trial.objective for trial in new_trials
             ]
-            log.debug(f"About to observe {len(points)} warm-starting points.")
-            print(f"About to observe {len(points)} warm-starting points.")
-            self.observe(points, results)
+            if kb_points:
+                log.debug(f"About to observe {len(kb_points)} warm-starting points.")
+                print(f"About to observe {len(kb_points)} warm-starting points.")
+                self.observe(kb_points, kb_results)
+            else:
+                print(f"Compatible trials: {compatible_trials}")
 
     @property
     def unwrapped(self) -> "BaseAlgorithm":
