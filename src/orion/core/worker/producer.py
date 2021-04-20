@@ -6,7 +6,7 @@ Produce and register samples to try
 Suggest new parameter sets which optimize the objective.
 
 """
-from typing import Optional, List
+from typing import Optional, List, Dict, Mapping
 import copy
 import logging
 import random
@@ -169,14 +169,14 @@ class Producer(object):
         ones.
         """
         trials = self.experiment.fetch_trials(with_evc_tree=True)
-        
+
         if self.knowledge_base and not self.warm_started:
             # TODO: Dont use the KB when we have enough points in the target task.
             ## Option 1:
             # Get the trials from other 'similar' experiments.
-            reusable_trials = self.knowledge_base.get_reusable_trials(self.experiment)
-            print(f"Reusable trials: {len(reusable_trials)}")
-
+            reusable_trials: Dict[
+                Mapping, List[Trial]
+            ] = self.knowledge_base.get_reusable_trials(self.experiment)
             if reusable_trials:
                 log.debug("### Warm starting")
                 self.algorithm.warm_start(reusable_trials)

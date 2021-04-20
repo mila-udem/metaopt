@@ -213,6 +213,7 @@ def build_experiment(
             max_broken=max_broken,
             branching=branching,
             working_dir=working_dir,
+            knowledge_base=knowledge_base,
         )
     except RaceCondition:
         # Try again, but if it fails again, raise. Race conditions due to version increment should
@@ -228,6 +229,7 @@ def build_experiment(
                 max_broken=max_broken,
                 branching=branching,
                 working_dir=working_dir,
+                knowledge_base=knowledge_base,
             )
         except RaceCondition as e:
             raise RaceCondition(

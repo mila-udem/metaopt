@@ -12,10 +12,6 @@ import logging
 from abc import ABCMeta, abstractmethod
 from contextlib import contextmanager
 from orion.core.utils import Factory
-from orion.core.utils.format_trials import trial_to_tuple
-from orion.core.utils.config import ExperimentInfo
-from orion.core.worker.trial import Trial
-from typing import List, Dict
 
 log = logging.getLogger(__name__)
 
@@ -205,67 +201,34 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
             # else:
             #     print(f"Point point {point} with id {point_id} isn't new.")
 
-    def warm_start(self, warm_start_trials: Dict[ExperimentInfo, List[Trial]]) -> None:
-        """ WIP: Use the given trials to warm-start the algorithm.
-
-        This by default observes all points that fit within the current space.
-        """
-        raise NotImplementedError(
-            f"Algorithm of type {type(self)} isn't warm-starteable yet."
-        )
-        compatible_trials: List[Trial] = []
-        task_ids: List[int] = []
-
-        # NOTE: Only keep points that fit within our space.
-        for trial in warm_start_trials:
-            try:
-                point = trial_to_tuple(trial=trial, space=self.space)
-                if point in self.space:
-                    compatible_trials.append(trial)
-            except ValueError as e:
-                print(f"Can't reuse trial {trial}: {e}")
-
-        with self.warm_start_mode():
-            # Only keep trials we haven't already warm-started with? Or leave that
-            # responsability to the `observe` method?
-            # Only keep the trials we haven't warm-started with before:
-            points = [
-                trial_to_tuple(trial=trial, space=self.space)
-                for trial in compatible_trials
-            ]
-            new_trials = [
-                trial
-                for trial, point in zip(compatible_trials, points)
-                if infer_trial_id(point) not in self._warm_start_trials
-            ]
-            # TODO: Add the task ids here
-            kb_points = [
-                trial_to_tuple(trial=trial, space=self.space) for trial in new_trials
-            ]
-            kb_results = [trial.objective for trial in new_trials]
-            if kb_points:
-                log.debug(f"About to observe {len(kb_points)} warm-starting points.")
-                print(f"About to observe {len(kb_points)} warm-starting points.")
-                self.observe(kb_points, kb_results)
-            else:
-                print(f"Compatible trials: {compatible_trials}")
-
     @property
     def unwrapped(self) -> "BaseAlgorithm":
         return self
 
     @contextmanager
     def warm_start_mode(self):
-        """ TODO: Context manager that prevents the algo from modifying its state
-        while observing points from warm-starting.
+        """ Context manager that is used while using points from similar experiments to
+        bootstrap (warm-start) the algorithm.
+
+        The idea behing this is that we don't want the algorithm to modify its state the
+        same way it would if it were observing regular points. For example, the number
+        of "used" trials shouldn't increase, etc.
+
+        Algorithm subclasses should extend this method in order to prevent their state
+        from being adversely affected by the default warm-starting behaviour, which is
+        to observe points from other experiments with an additional `task_id` dimension.
         """
         trials_info_copy = self.unwrapped._trials_info.copy()
         # state_before = self.state_dict()
         log.info(
-            f"Entering warm-start mode, with {len(self.unwrapped._warm_start_trials)} warm starting trials and {len(self.unwrapped._trials_info)} 'normal' trials."
+            f"Entering warm-start mode, with {len(self.unwrapped._warm_start_trials)} "
+            f"warm starting trials and {len(self.unwrapped._trials_info)} 'normal' "
+            f"trials."
         )
         log.info(f"self.is_done? {self.is_done}")
+
         yield
+
         # Store any new entries into the 'warm start' dict.
         self.unwrapped._warm_start_trials.update(
             {
