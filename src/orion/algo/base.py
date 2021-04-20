@@ -95,7 +95,6 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
        Technical Report SFI-TR-95-02-010, Santa Fe Institute, 1995.
 
     """
-    DONT_RECURSE_PLEASE: bool = False
     requires_type = None
     requires_shape = None
     requires_dist = None
@@ -107,22 +106,17 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
             kwargs,
         )
         self._trials_info = {}  # Stores Unique Trial -> Result
-        self._warm_start_trials = {} # Stores unique warm-star trials and their results
+        self._warm_start_trials = {}  # Stores unique warm-star trials and their results
         self._space = space
         self._param_names = list(kwargs.keys())
         # Instantiate tunable parameters of an algorithm
         for varname, param in kwargs.items():
             # Check if tunable element is another algorithm
-            if type(self).DONT_RECURSE_PLEASE:
-                continue
             if isinstance(param, dict) and len(param) == 1:
                 subalgo_type = list(param)[0]
                 subalgo_kwargs = param[subalgo_type]
-                log.info(f"calling OptimizationAlgorithm for subalgo of type {subalgo_type}")
-                type(self).DONT_RECURSE_PLEASE = True
                 if isinstance(subalgo_kwargs, dict):
                     param = OptimizationAlgorithm(subalgo_type, space, **subalgo_kwargs)
-                type(self).DONT_RECURSE_PLEASE = False
             elif (
                 isinstance(param, str)
                 and param.lower() in OptimizationAlgorithm.typenames
@@ -216,7 +210,9 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
 
         This by default observes all points that fit within the current space.
         """
-        raise NotImplementedError(f"Algorithm of type {type(self)} isn't warm-starteable yet.")
+        raise NotImplementedError(
+            f"Algorithm of type {type(self)} isn't warm-starteable yet."
+        )
         compatible_trials: List[Trial] = []
         task_ids: List[int] = []
 
@@ -234,19 +230,19 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
             # responsability to the `observe` method?
             # Only keep the trials we haven't warm-started with before:
             points = [
-                trial_to_tuple(trial=trial, space=self.space) for trial in compatible_trials
+                trial_to_tuple(trial=trial, space=self.space)
+                for trial in compatible_trials
             ]
             new_trials = [
-                trial for trial, point in zip(compatible_trials, points)
+                trial
+                for trial, point in zip(compatible_trials, points)
                 if infer_trial_id(point) not in self._warm_start_trials
             ]
             # TODO: Add the task ids here
             kb_points = [
                 trial_to_tuple(trial=trial, space=self.space) for trial in new_trials
             ]
-            kb_results = [
-                trial.objective for trial in new_trials
-            ]
+            kb_results = [trial.objective for trial in new_trials]
             if kb_points:
                 log.debug(f"About to observe {len(kb_points)} warm-starting points.")
                 print(f"About to observe {len(kb_points)} warm-starting points.")
@@ -265,17 +261,28 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         """
         trials_info_copy = self.unwrapped._trials_info.copy()
         # state_before = self.state_dict()
-        print(f"Entering warm-start mode, with {len(self.unwrapped._warm_start_trials)} warm starting trials and {len(self.unwrapped._trials_info)} 'normal' trials.")
-        print(f"self.is_done? {self.is_done}")
+        log.info(
+            f"Entering warm-start mode, with {len(self.unwrapped._warm_start_trials)} warm starting trials and {len(self.unwrapped._trials_info)} 'normal' trials."
+        )
+        log.info(f"self.is_done? {self.is_done}")
         yield
         # Store any new entries into the 'warm start' dict.
-        self.unwrapped._warm_start_trials.update({
-            k: v for k, v in self.unwrapped._trials_info.items() if k not in trials_info_copy
-        })
+        self.unwrapped._warm_start_trials.update(
+            {
+                k: v
+                for k, v in self.unwrapped._trials_info.items()
+                if k not in trials_info_copy
+            }
+        )
+        # Restore the 'trials_info' to its original state.
         self.unwrapped._trials_info = trials_info_copy
-        print(f"Exiting warm-start mode, with {len(self.unwrapped._warm_start_trials)} warm starting trials and {len(self.unwrapped._trials_info)} 'normal' trials.")
-        # TODO: Could also maybe restore the "number of used trials"?
-        print(f"self.is_done? {self.is_done}")
+        log.info(
+            f"Exiting warm-start mode, with {len(self.unwrapped._warm_start_trials)} "
+            f"warm starting trials and {len(self.unwrapped._trials_info)} 'normal' "
+            f"trials."
+        )
+        # TODO: Do we also need to reset some counter for the number of used trials?
+        log.info(f"self.is_done? {self.is_done}")
 
     @property
     def is_done(self):

@@ -140,4 +140,3 @@ class ExperimentInfo(Config):
     # IDEA: Store a reference to the Storage object associated with the experiment in
     # case we want to support multi-storage in the future.
     _storage: Optional[StorageConfig] = field(default=None, hash=False, repr=False)
-
