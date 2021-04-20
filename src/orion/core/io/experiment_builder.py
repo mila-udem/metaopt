@@ -527,7 +527,7 @@ def _instantiate_algo(
     """
     if not config:
         config = orion.core.config.experiment.algorithms
-    
+
     try:
         if knowledge_base is not None:
             from orion.core.worker.multi_task_algo import MultiTaskAlgo

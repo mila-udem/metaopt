@@ -5,10 +5,10 @@ import inspect
 import textwrap
 import warnings
 from abc import ABC, abstractmethod
-from contextlib import contextmanager
 from logging import getLogger
-from typing import Any, Dict, List, Mapping, Tuple, Type, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Type, Union
 
+import numpy as np
 from orion.algo.base import BaseAlgorithm, infer_trial_id
 from orion.algo.space import Categorical, Space
 from orion.client import ExperimentClient
@@ -18,10 +18,14 @@ from orion.core.worker.primary_algo import PrimaryAlgo
 from orion.core.worker.trial import Trial
 from orion.storage.base import Storage
 
+from .algo_wrapper import AlgoWrapper, Point
 log = getLogger(__file__)
 
 
 class AbstractKnowledgeBase(ABC):
+    """ Abstract Base Class for the KnowledgeBase, which currently isn't part of the
+    Orion codebase.
+    """
     def __init__(self, path_or_storage: Union[str, Storage] = None):
         pass
 
@@ -31,11 +35,31 @@ class AbstractKnowledgeBase(ABC):
         target_experiment: Union[Experiment, ExperimentClient],
         max_trials: int = None,
     ) -> Dict["ExperimentInfo", List[Trial]]:
+        """ Retrieve experiments 'similar' to `target_experiment` and their trials.
+
+        When `max_trials` is given, only up to `max_trials` are returned in total for
+        all experiments.
+
+        Parameters
+        ----------
+        target_experiment : Union[Experiment, ExperimentClient]
+            The target experiment, or experiment client.
+        max_trials : int, optional
+            Maximum total number of trials to fetch. By default `None`, in which case
+            all trials from all 'related' experiments are returned. 
+
+        Returns
+        -------
+        Dict[ExperimentInfo, List[Trial]]
+            Dictionary mapping from `ExperimentInfo` objects to a list of trials from
+            that experiment.
+        """
         pass
 
     @property
     @abstractmethod
     def n_stored_experiments(self) -> int:
+        """ Returns the current number of experiments registered the Knowledge base. """
         pass
 
 
@@ -43,6 +67,7 @@ class WarmStarteable(ABC):
     """ Base class for Algorithms which can leverage 'related' past trials to bootstrap
     their optimization process.
     """
+
     @abstractmethod
     def warm_start(self, warm_start_trials: Dict["ExperimentInfo", List[Trial]]):
         """ Use the given trials to warm-start the algorithm.
@@ -58,11 +83,6 @@ class WarmStarteable(ABC):
         warm_start_trials : Dict[Mapping, List[Trial]]
             Dictionary mapping from ExperimentInfo objects (dataclasses containing the
             experiment config) to the list of Trials associated with that experiment.
-
-        Raises
-        ------
-        NotImplementedError
-            [description]
         """
         raise NotImplementedError(
             f"Algorithm of type {type(self)} isn't warm-starteable yet."
@@ -100,13 +120,13 @@ def is_warm_starteable(
     if isinstance(algo_or_config, dict):
         first_key = list(algo_or_config)[0]
         return len(algo_or_config) == 1 and is_warm_starteable(first_key)
-    return isinstance(algo_or_config, WarmStarteable)
+    return isinstance(algo_or_config.unwrapped, WarmStarteable)
 
 
-# pylint: disable=too-many-public-methods
-class MultiTaskAlgo(BaseAlgorithm):
+class MultiTaskAlgo(AlgoWrapper):
     """Wrapper that makes the algo "multi-task" by concatenating the task ids to the inputs.
     """
+
     def __init__(
         self,
         space: Space,
@@ -119,13 +139,16 @@ class MultiTaskAlgo(BaseAlgorithm):
         self.knowledge_base = knowledge_base
         self._enabled: bool
         if is_warm_starteable(algorithm_config):
-            log.info("Chosen algorithm is warm-starteable, disabling this multi-task wrapper.")
+            log.info(
+                "Chosen algorithm is warm-starteable, disabling this multi-task wrapper."
+            )
             self.algorithm = PrimaryAlgo(space=space, algorithm_config=algorithm_config)
             self.space = self.algorithm.space
             self._enabled = False
             return  # Return, just to indicate we don't do the other modifications below.
         else:
             self._enabled = True
+
         # Figure out the number of potential tasks using the KB.
         # TODO: The current Experiment might already be registered in the KB?
         if knowledge_base.n_stored_experiments < 1:
@@ -141,9 +164,9 @@ class MultiTaskAlgo(BaseAlgorithm):
             )
         # TODO: Should we have this dimension be larger than the current number of
         # experiments in the KB, in case some get added in the future?
-        max_number_of_tasks = self.knowledge_base.n_stored_experiments
+        max_task_id = self.knowledge_base.n_stored_experiments + 1
         task_label_dimension = Categorical(
-            "task_id", list(range(0, max_number_of_tasks)), default_value=0,
+            "task_id", list(range(0, max_task_id)), default_value=0,
         )
         space_without_task_ids = Space(space.copy())
         space_with_task_ids = Space(space.copy())
@@ -162,7 +185,7 @@ class MultiTaskAlgo(BaseAlgorithm):
         assert "task_id" in self.algorithm.space
         self.transformed_space = self.space
 
-    def suggest(self, num=1):
+    def suggest(self, num: int = 1) -> List[Point]:
         """Suggest a `num` of new sets of parameters.
 
         :param num: how many sets to be suggested.
@@ -189,7 +212,9 @@ class MultiTaskAlgo(BaseAlgorithm):
                 )
         return points_without_task_ids
 
-    def observe(self, points, results):
+    def observe(
+        self, points: List[Point], results: Union[List[float], List[Dict]]
+    ) -> None:
         """Observe evaluation `results` corresponding to list of `points` in
         space.
 
@@ -202,9 +227,23 @@ class MultiTaskAlgo(BaseAlgorithm):
         return self.algorithm.observe(points, results)
 
     def warm_start(self, warm_start_trials: Dict[Mapping, List[Trial]]) -> None:
+        """ Use the given trials to warm-start the algorithm.
+
+        These experiments and their trials were fetched from some knowledge base, and
+        are believed to be somewhat similar to the current on-going experiment.
+
+        It is the responsability of the Algorithm to implement this method in order to
+        take advantage of these points.
+
+        Parameters
+        ----------
+        warm_start_trials : Dict[Mapping, List[Trial]]
+            Dictionary mapping from ExperimentInfo objects (dataclasses containing the
+            experiment config) to the list of Trials associated with that experiment.
+        """
         # Being asked to warm-start the algorithm.
-        log.debug(f"Warm starting the algo with trials {warm_start_trials}")
         if is_warm_starteable(self.algorithm):
+            log.debug(f"Warm starting the algo with trials {warm_start_trials}")
             self.algorithm.warm_start(warm_start_trials)
             log.info("Algorithm was successfully warm-started, returning.")
             return
@@ -234,7 +273,13 @@ class MultiTaskAlgo(BaseAlgorithm):
                     if point not in self.space:
                         continue
                     # Add the task id to the point:
-                    point = point + (i,)
+                    # The task ID of the given experiment is `i + 1`, so that the task
+                    # id 0 is reserved for the trials of the current task.
+                    # TODO: This assumes that the trials from the knowledge base don't
+                    # include those of the current experiment.
+                    task_id = i + 1
+
+                    point = point + (task_id,)
                     compatible_trials.append(trial)
                     compatible_points.append(point)
                 except ValueError as e:
@@ -247,7 +292,8 @@ class MultiTaskAlgo(BaseAlgorithm):
                     *[
                         (trial, point)
                         for trial, point in zip(compatible_trials, compatible_points)
-                        if infer_trial_id(point) not in self.unwrapped._warm_start_trials
+                        if infer_trial_id(point)
+                        not in self.unwrapped._warm_start_trials
                     ]
                 )
             )
@@ -260,23 +306,19 @@ class MultiTaskAlgo(BaseAlgorithm):
             log.info(f"About to observe {len(new_points)} new warm-starting points!")
             self.algorithm.observe(new_points, results)
 
-    @property
-    def unwrapped(self) -> "BaseAlgorithm":
-        return self.algorithm.unwrapped
-
-    def score(self, point):
+    def score(self, point: Union[Tuple, np.ndarray]) -> float:
         """Allow algorithm to evaluate `point` based on a prediction about
         this parameter set's performance. Return a subjective measure of expected
         performance.
 
-        By default, return the same score any parameter (no preference).
+        By default, return the same score for any parameter (no preference).
         """
         assert point in self.space
         if self._enabled:
             point = point + (self.current_task_id,)
         return self.algorithm.score(point)
 
-    def judge(self, point, measurements):
+    def judge(self, point: Point, measurements: Any) -> Optional[Dict]:
         """Inform an algorithm about online `measurements` of a running trial.
 
         The algorithm can return a dictionary of data which will be provided
@@ -289,40 +331,3 @@ class MultiTaskAlgo(BaseAlgorithm):
         return self.algorithm.judge(
             self.transformed_space.transform(point), measurements
         )
-
-    @property
-    def should_suspend(self):
-        """Allow algorithm to decide whether a particular running trial is still
-        worth to complete its evaluation, based on information provided by the
-        `judge` method.
-
-        """
-        return self.algorithm.should_suspend
-
-    @property
-    def configuration(self):
-        """Return tunable elements of this algorithm in a dictionary form
-        appropriate for saving.
-        """
-        return self.algorithm.configuration
-
-    @property
-    def is_done(self):
-        """Return True, if an algorithm holds that there can be no further improvement."""
-        return self.algorithm.is_done
-
-    def seed_rng(self, seed):
-        """Seed the state of the algorithm's random number generator."""
-        self.algorithm.seed_rng(seed)
-
-    @property
-    def state_dict(self):
-        """Return a state dict that can be used to reset the state of the algorithm."""
-        return self.algorithm.state_dict
-
-    def set_state(self, state_dict):
-        """Reset the state of the algorithm based on the given state_dict
-
-        :param state_dict: Dictionary representing state of an algorithm
-        """
-        self.algorithm.set_state(state_dict)
