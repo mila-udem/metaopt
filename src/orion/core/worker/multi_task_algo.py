@@ -204,16 +204,16 @@ class MultiTaskAlgo(BaseAlgorithm):
     def warm_start(self, warm_start_trials: Dict[Mapping, List[Trial]]) -> None:
         # Being asked to warm-start the algorithm.
         log.debug(f"Warm starting the algo with trials {warm_start_trials}")
-        try:
+        if is_warm_starteable(self.algorithm):
             self.algorithm.warm_start(warm_start_trials)
             log.info("Algorithm was successfully warm-started, returning.")
             return
-        except NotImplementedError:
-            # Perform warm-starting using only the supported trials.
-            log.info(
-                "Will warm-start using contextual information, since the algo "
-                "isn't warm-starteable."
-            )
+
+        # Perform warm-starting using only the supported trials.
+        log.info(
+            "Will warm-start using contextual information, since the algo "
+            "isn't warm-starteable."
+        )
 
         compatible_trials: List[Trial] = []
         compatible_points: List[Tuple] = []
