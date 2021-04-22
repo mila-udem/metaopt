@@ -175,7 +175,10 @@ class Producer(object):
 
         new_completed_trials = []
         for trial in completed_trials:
-            if trial not in self.trials_history:
+            # if trial not in self.trials_history:
+            if not self.algorithm.has_observed(
+                format_trials.trial_to_tuple(trial, self.space)
+            ):
                 new_completed_trials.append(trial)
 
         log.debug("### %s", new_completed_trials)
