@@ -23,6 +23,9 @@ from orion.storage.base import Storage, get_storage, setup_storage
 from orion.storage.legacy import Legacy
 from orion.testing import OrionState
 
+# So that assert messages show up in tests defined outside testing suite.
+pytest.register_assert_rewrite("orion.testing")
+
 
 def pytest_addoption(parser):
     parser.addoption(
