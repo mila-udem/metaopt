@@ -146,6 +146,70 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         """
         self._trials_info = state_dict.get("_trials_info")
 
+    def format_point(self, point):
+        """Format point based on space transformations
+
+        This will apply the reverse transformation on the point and then
+        transform it again.
+
+        Some transformations are lossy and thus the points suggested by the algorithm could
+        be different when returned to `observe`. Using `format_point` makes it possible
+        for the algorithm to see the final version of the point after back and forth
+        transformations. This way it can recognise the point in `observe` and also
+        avoid duplicates that would have gone unnoticed during suggestion.
+
+        Parameters
+        ----------
+        point : tuples of array-likes
+            Points from a `orion.algo.space.Space`.
+        """
+
+        point = tuple(point)
+        if hasattr(self.space, "transform"):
+            point = self.space.transform(self.space.reverse(point))
+
+        return point
+
+    def get_id(self, point, ignore_fidelity=False):
+        """Compute a unique hash for a point based on params
+
+        Parameters
+        ----------
+        point : tuples of array-likes
+            Points from a `orion.algo.space.Space`.
+        ignore_fidelity: bool, optional
+            If True, the fidelity dimension is ignored when computing a unique hash for
+            the trial. Defaults to False.
+        """
+        # Apply transforms and reverse to see data as it would come from DB
+        # (Some transformations looses some info. ex: Precision transformation)
+        point = list(self.format_point(point))
+
+        if ignore_fidelity:
+            non_fidelity_dims = point[0 : self.fidelity_index]
+            non_fidelity_dims.extend(point[self.fidelity_index + 1 :])
+            point = non_fidelity_dims
+
+        return hashlib.md5(str(point).encode("utf-8")).hexdigest()
+
+    @property
+    def fidelity_index(self):
+        """Compute the index of the point where fidelity is.
+
+        Returns None if there is no fidelity dimension.
+        """
+
+        def _is_fidelity(dim):
+            return dim.type == "fidelity"
+
+        fidelity_index = [
+            i for i, dim in enumerate(self.space.values()) if _is_fidelity(dim)
+        ]
+        if fidelity_index:
+            return fidelity_index[0]
+
+        return None
+
     @abstractmethod
     def suggest(self, num=1):
         """Suggest a `num` of new sets of parameters.
