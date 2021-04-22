@@ -12,6 +12,7 @@ import logging
 from abc import ABCMeta, abstractmethod
 
 from orion.core.utils import Factory
+from orion.algo.space import Fidelity
 
 log = logging.getLogger(__name__)
 
@@ -176,7 +177,6 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         ----------
         points : list of tuples of array-likes
            Points from a `orion.algo.space.Space`.
-           Evaluated problem parameters by a consumer.
         results : list of dicts
            Contains the result of an evaluation; partial information about the
            black-box function at each point in `params`.
@@ -194,14 +194,62 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
 
         """
         for point, result in zip(points, results):
-            point_id = infer_trial_id(point)
+            if not self.has_observed(point):
+                self._trials_info[self.get_id(point)] = (point, result)
 
-            if point_id not in self._trials_info:
-                self._trials_info[point_id] = (point, result)
+    @property
+    def n_suggested(self):
+        """Number of trials suggested by the algorithm"""
+        return len(self._trials_info)
+
+    @property
+    def n_observed(self):
+        """Number of completed trials observed by the algorithm"""
+        return sum(bool(point[1] is not None) for point in self._trials_info.values())
+
+    def has_suggested(self, point):
+        """Whether the algorithm has suggested a given point.
+
+        Parameters
+        ----------
+        point : tuples of array-likes
+           Points from a `orion.algo.space.Space`.
+
+        Returns
+        -------
+        bool
+            True if the point was suggested by the algo, False otherwise.
+
+        """
+        return self.get_id(point) in self._trials_info
+
+    def has_observed(self, point):
+        """Whether the algorithm has observed a given point objective.
+
+        This only counts observed completed trials.
+
+        Parameters
+        ----------
+        point : tuples of array-likes
+            Points from a `orion.algo.space.Space`.
+
+        Returns
+        -------
+        bool
+            True if the point's objective was observed by the algo, False otherwise.
+
+        """
+
+        trial_id = self.get_id(point)
+        return (
+            trial_id in self._trials_info and self._trials_info[trial_id][1] is not None
+        )
 
     @property
     def is_done(self):
-        """Return True, if an algorithm holds that there can be no further improvement.
+        """Whether the algorithm is done and will not make further suggestions.
+
+        Return True, if an algorithm holds that there can be no further improvement.
         By default, the cardinality of the specified search space will be used to check
         if all possible sets of parameters has been tried.
         """

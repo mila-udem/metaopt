@@ -95,6 +95,32 @@ Space: {}""".format(
             tpoints.append(self.transformed_space.transform(point))
         self.algorithm.observe(tpoints, results)
 
+    def has_suggested(self, point):
+        """Whether the algorithm has suggested a given point.
+
+        .. seealso:: `orion.algo.base.BaseAlgorithm.has_suggested`
+
+        """
+        return self.algorithm.has_suggested(self.transformed_space.transform(point))
+
+    def has_observed(self, point):
+        """Whether the algorithm has observed a given point.
+
+        .. seealso:: `orion.algo.base.BaseAlgorithm.has_observed`
+
+        """
+        return self.algorithm.has_observed(self.transformed_space.transform(point))
+
+    @property
+    def n_suggested(self):
+        """Number of trials suggested by the algorithm"""
+        return self.algorithm.n_suggested
+
+    @property
+    def n_observed(self):
+        """Number of completed trials observed by the algorithm"""
+        return self.algorithm.n_observed
+
     @property
     def is_done(self):
         """Return True, if an algorithm holds that there can be no further improvement."""
