@@ -558,7 +558,7 @@ class GMMSampler:
         point = []
         for _ in range(num):
             pdf = numpy.argmax(self.tpe.rng.multinomial(1, self.weights))
-            new_points = self.pdfs[pdf].rvs(size=5)
+            new_points = self.pdfs[pdf].rvs(size=5, random_state=self.tpe.rng)
             for pt in new_points:
                 if self.low <= pt < self.high:
                     point.append(pt)
