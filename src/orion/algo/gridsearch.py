@@ -189,7 +189,7 @@ class GridSearch(BaseAlgorithm):
         super(GridSearch, self).set_state(state_dict)
         self.grid = state_dict["grid"]
 
-    def suggest(self, num=1):
+    def suggest(self, num=None):
         """Return the entire grid of suggestions
 
         Returns
@@ -202,7 +202,19 @@ class GridSearch(BaseAlgorithm):
         """
         if self.grid is None:
             self._initialize()
-        return self.grid
+        if num is None:
+            num = len(self.grid)
+
+        i = 0
+        points = []
+        while len(points) < num and i < len(self.grid):
+            point = self.grid[i]
+            if not self.has_suggested(point):
+                self._trials_info[self.get_id(point)] = (point, None)
+                points.append(point)
+            i += 1
+
+        return points
 
     @property
     def is_done(self):
