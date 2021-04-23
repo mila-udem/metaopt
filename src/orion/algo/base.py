@@ -7,6 +7,7 @@ Formulation of a general search algorithm with respect to some objective.
 Algorithm implementations must inherit from `orion.algo.base.OptimizationAlgorithm`.
 
 """
+import copy
 import hashlib
 import logging
 from abc import ABCMeta, abstractmethod
@@ -137,7 +138,7 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
     @property
     def state_dict(self):
         """Return a state dict that can be used to reset the state of the algorithm."""
-        return {"_trials_info": self._trials_info}
+        return {"_trials_info": copy.deepcopy(self._trials_info)}
 
     def set_state(self, state_dict):
         """Reset the state of the algorithm based on the given state_dict
