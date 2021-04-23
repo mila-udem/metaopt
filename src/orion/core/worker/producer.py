@@ -95,12 +95,12 @@ class Producer(object):
             self._sample_guard(start)
 
             log.debug("### Algorithm suggests new points.")
-            new_points = self.naive_algorithm.suggest(self.pool_size)
+            new_points = self.naive_algorithm.suggest()
 
             # Sync state of original algo so that state continues evolving.
             self.algorithm.set_state(self.naive_algorithm.state_dict)
 
-            if new_points is None:
+            if not new_points:
                 if self.algorithm.is_done:
                     return
 
