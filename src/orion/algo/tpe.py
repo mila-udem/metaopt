@@ -168,7 +168,7 @@ class TPE(BaseAlgorithm):
     """
 
     requires_type = None
-    requires_dist = None
+    requires_dist = "linear"
     requires_shape = "flattened"
 
     # pylint:disable=too-many-arguments
@@ -229,11 +229,12 @@ class TPE(BaseAlgorithm):
                 "uniform",
                 "reciprocal",
                 "int_uniform",
+                "int_reciprocal",
                 "choices",
             ]:
                 raise ValueError(
                     "TPE now only supports uniform, loguniform, uniform discrete "
-                    "and choices as prior."
+                    f"and choices as prior: {dimension.prior_name}"
                 )
 
             shape = dimension.shape
@@ -373,21 +374,13 @@ class TPE(BaseAlgorithm):
 
     def _sample_real_dimension(self, dimension, shape_size, below_points, above_points):
         """Sample values for real dimension"""
-        if dimension.prior_name == "uniform":
+        if dimension.prior_name in ["uniform", "reciprocal"]:
             return self.sample_one_dimension(
                 dimension,
                 shape_size,
                 below_points,
                 above_points,
                 self._sample_real_point,
-            )
-        elif dimension.prior_name == "reciprocal":
-            return self.sample_one_dimension(
-                dimension,
-                shape_size,
-                below_points,
-                above_points,
-                self._sample_loguniform_real_point,
             )
         else:
             raise NotImplementedError()
@@ -494,7 +487,8 @@ class TPE(BaseAlgorithm):
     def split_trials(self):
         """Split the observed trials into good and bad ones based on the ratio `gamma``"""
         sorted_trials = sorted(
-            self._trials_info.values(), key=lambda x: x[1]["objective"]
+            (point for point in self._trials_info.values() if point[1] is not None),
+            key=lambda x: x[1]["objective"],
         )
         sorted_points = [list(points) for points, results in sorted_trials]
 
