@@ -210,6 +210,7 @@ Configuration
                 seed: null
                 num_rungs: null
                 num_brackets: 1
+                repetitions: 1
 
         strategy: StubParallelStrategy
 
@@ -237,6 +238,12 @@ Using a grace period that is too small may bias ASHA too strongly towards fast
 converging trials that do not lead to best results at convergence (stragglers).
 To overcome this, you can increase the number of brackets, which increases the amount of resources
 required for optimisation but decreases the bias towards stragglers. Default is 1.
+
+
+``repetitions``
+
+Number of execution of ASHA. Default is ``numpy.inf`` which means to
+run ASHA until no new trials can be suggested.
 
 
 .. _tpe-algorithm:
