@@ -56,7 +56,7 @@ class PrimaryAlgo(BaseAlgorithm):
         """
         self.algorithm.set_state(state_dict)
 
-    def suggest(self, num=1):
+    def suggest(self, num=None):
         """Suggest a `num` of new sets of parameters.
 
         :param num: how many sets to be suggested.
@@ -80,7 +80,11 @@ Space: {}""".format(
                     )
                 )
 
-        return [self.transformed_space.reverse(point) for point in points]
+        rpoints = []
+        for point in points:
+            rpoints.append(self.transformed_space.reverse(point))
+
+        return rpoints
 
     def observe(self, points, results):
         """Observe evaluation `results` corresponding to list of `points` in
