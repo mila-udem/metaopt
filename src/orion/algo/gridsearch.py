@@ -41,12 +41,13 @@ def fidelity_grid(dim, num):
 
 def categorical_grid(dim, num):
     """Build categorical grid, that is, all categories"""
-    if len(dim.categories) != num:
+    categories = dim.interval()
+    if len(categories) != num:
         log.warning(
-            f"Categorical dimension {dim.name} does not have {num} choices: {dim.categories}. "
-            "Will use {len(dim.categories)} choices instead."
+            f"Categorical dimension {dim.name} does not have {num} choices: {categories}. "
+            "Will use {len(categories)} choices instead."
         )
-    return dim.categories
+    return categories
 
 
 def discrete_grid(dim, num):
