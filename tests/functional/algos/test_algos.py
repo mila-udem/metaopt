@@ -21,7 +21,7 @@ space_with_fidelity = {"x": space["x"], "noise": "fidelity(1,10,4)"}
 
 algorithm_configs = {
     "random": {"random": {"seed": 1}},
-    "gridsearch": {"gridsearch": {"n_values": 100}},
+    "gridsearch": {"gridsearch": {"n_values": 40}},
     "tpe": {
         "tpe": {
             "seed": 1,
@@ -70,7 +70,7 @@ def rosenbrock(x, noise=None):
     ]
 
 
-def multidim_rosenbrock(x, noise=None, shape=(3, 2)):
+def multidim_rosenbrock(x, noise=None, shape=(2, 1)):
     x = numpy.array(x)
     assert x.shape == shape
     return rosenbrock(x.reshape(-1)[0], noise)
@@ -98,7 +98,7 @@ def test_missing_fidelity(algorithm):
 )
 def test_simple(algorithm):
     """Test a simple usage scenario."""
-    max_trials = 100
+    max_trials = 30
     exp = workon(rosenbrock, space, algorithms=algorithm, max_trials=max_trials)
 
     assert exp.max_trials == max_trials
@@ -110,7 +110,7 @@ def test_simple(algorithm):
 
     best_trial = sorted(trials, key=lambda trial: trial.objective.value)[0]
     assert best_trial.objective.name == "objective"
-    assert abs(best_trial.objective.value - 23.4) < 0.5
+    assert abs(best_trial.objective.value - 23.4) < 15
     assert len(best_trial.params) == 1
     param = best_trial._params[0]
     assert param.name == "x"
@@ -126,7 +126,7 @@ def test_cardinality_stop(algorithm):
     """Test when algo needs to stop because all space is explored (dicrete space)."""
     discrete_space = copy.deepcopy(space)
     discrete_space["x"] = "uniform(-10, 5, discrete=True)"
-    exp = workon(rosenbrock, discrete_space, algorithms=algorithm, max_trials=100)
+    exp = workon(rosenbrock, discrete_space, algorithms=algorithm, max_trials=30)
 
     trials = exp.fetch_trials()
     assert len(trials) == 16
@@ -138,26 +138,25 @@ def test_cardinality_stop(algorithm):
 )
 def test_with_fidelity(algorithm):
     """Test a scenario with fidelity."""
-    exp = workon(rosenbrock, space_with_fidelity, algorithms=algorithm, max_trials=100)
+    exp = workon(rosenbrock, space_with_fidelity, algorithms=algorithm, max_trials=30)
 
     assert exp.configuration["algorithms"] == algorithm
 
     trials = exp.fetch_trials()
-    assert len(trials) <= 100
-    assert trials[-1].status == "completed"
+    assert len(trials) >= 30
+    assert trials[29].status == "completed"
 
+    trials = [trial for trial in trials if trial.status == "completed"]
     results = [trial.objective.value for trial in trials]
-    print(min(results))
-    print(max(results))
     best_trial = next(iter(sorted(trials, key=lambda trial: trial.objective.value)))
 
     assert best_trial.objective.name == "objective"
-    assert abs(best_trial.objective.value - 23.4) < 1e-5
+    assert abs(best_trial.objective.value - 23.4) < 2
     assert len(best_trial.params) == 2
     fidelity = best_trial._params[0]
     assert fidelity.name == "noise"
     assert fidelity.type == "fidelity"
-    assert fidelity.value == 10
+    assert fidelity.value in [1, 2, 5, 10]
     param = best_trial._params[1]
     assert param.name == "x"
     assert param.type == "real"
@@ -169,25 +168,30 @@ def test_with_fidelity(algorithm):
 def test_with_multidim(algorithm):
     """Test a scenario with a dimension shape > 1."""
     space = copy.deepcopy(space_with_fidelity)
-    space["x"] = "uniform(-50, 50, shape=(3, 2))"
-    exp = workon(multidim_rosenbrock, space, algorithms=algorithm, max_trials=100)
+    space["x"] = "uniform(-50, 50, shape=(2, 1))"
+    MAX_TRIALS = 30
+    exp = workon(
+        multidim_rosenbrock, space, algorithms=algorithm, max_trials=MAX_TRIALS
+    )
 
     assert exp.configuration["algorithms"] == algorithm
 
     trials = exp.fetch_trials()
-    assert len(trials) <= 100
-    assert trials[-1].status == "completed"
+    assert len(trials) >= 25 # Grid-search is a bit smaller
+    completed_trials = exp.fetch_trials_by_status("completed")
+    assert len(completed_trials) >= MAX_TRIALS or len(completed_trials) == len(trials)
 
+    trials = completed_trials
     results = [trial.objective.value for trial in trials]
     best_trial = next(iter(sorted(trials, key=lambda trial: trial.objective.value)))
 
     assert best_trial.objective.name == "objective"
-    assert abs(best_trial.objective.value - 23.4) < 1e-5
+    assert abs(best_trial.objective.value - 23.4) < 2
     assert len(best_trial.params) == 2
     fidelity = best_trial._params[0]
     assert fidelity.name == "noise"
     assert fidelity.type == "fidelity"
-    assert fidelity.value == 10
+    assert fidelity.value in [1, 2, 5, 10]
     param = best_trial._params[1]
     assert param.name == "x"
     assert param.type == "real"
@@ -221,16 +225,17 @@ def test_with_evc(algorithm):
         assert exp.configuration["algorithms"] == algorithm
 
         trials = exp.fetch_trials(with_evc_tree=False)
-        assert len(trials) >= 30
+        # Some algo may not be able to suggest exactly 30 trials (ex: hyperband)
+        assert len(trials) >= 20
 
         trials_with_evc = exp.fetch_trials(with_evc_tree=True)
-        assert len(trials_with_evc) >= 40
+        assert len(trials_with_evc) >= 31
         assert len(trials_with_evc) - len(trials) == 10
 
         completed_trials = [
             trial for trial in trials_with_evc if trial.status == "completed"
         ]
-        assert len(completed_trials) == 40
+        assert len(completed_trials) > 30
 
         results = [trial.objective.value for trial in completed_trials]
         best_trial = next(
