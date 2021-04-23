@@ -444,6 +444,7 @@ def test_duplicate_within_pool(producer, storage, random_dt):
     new_trials_in_db_before = len(storage._fetch_trials({"status": "new"}))
 
     producer.experiment.pool_size = 2
+    producer.algorithm.algorithm.default_num = 2
 
     producer.experiment.algorithms.algorithm.possible_values = [
         ("gru", "rnn"),
@@ -487,6 +488,7 @@ def test_duplicate_within_pool_and_db(producer, storage, random_dt):
     new_trials_in_db_before = len(storage._fetch_trials({"status": "new"}))
 
     producer.experiment.pool_size = 2
+    producer.algorithm.algorithm.default_num = 2
 
     producer.experiment.algorithms.algorithm.possible_values = [
         ("gru", "rnn"),
@@ -658,7 +660,7 @@ def test_evc_duplicates(monkeypatch, producer):
         experiment.fetch_trials()
     )
 
-    def suggest(pool_size):
+    def suggest(pool_size=None):
         return [trial_to_tuple(experiment.fetch_trials()[-1], experiment.space)]
 
     producer.experiment = new_experiment

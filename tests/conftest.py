@@ -93,6 +93,7 @@ class DumbAlgo(BaseAlgorithm):
         self._score_point = None
         self._judge_point = None
         self._measurements = None
+        self.default_num = 1
         self.possible_values = [value]
         super(DumbAlgo, self).__init__(
             space,
@@ -138,8 +139,10 @@ class DumbAlgo(BaseAlgorithm):
         self._num = state_dict["num"]
         self.done = state_dict["done"]
 
-    def suggest(self, num=1):
+    def suggest(self, num=None):
         """Suggest based on `value`."""
+        if num is None:
+            num = self.default_num
         self._num += num
 
         rval = []
