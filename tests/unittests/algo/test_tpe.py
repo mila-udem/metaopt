@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """Tests for :mod:`orion.algo.tpe`."""
+import itertools
 
 import numpy
 import pytest
@@ -16,6 +17,7 @@ from orion.algo.tpe import (
     ramp_up_weights,
 )
 from orion.core.worker.transformer import build_required_space
+from orion.testing.algo import BaseAlgoTests
 
 
 @pytest.fixture()
@@ -679,3 +681,60 @@ class TestTPE:
         tpe.n_ei_candidates = 24
         point = tpe.suggest(1)
         assert len(point) > 0
+
+
+N_INIT = 10
+
+
+class TestTPE(BaseAlgoTests):
+    algo_name = "tpe"
+    config = {
+        "seed": 123456,
+        "n_initial_points": N_INIT,
+        "n_ei_candidates": 4,
+        "gamma": 0.5,
+        "equal_weight": True,
+        "prior_weight": 0.8,
+        "full_weight_num": 10,
+    }
+
+    def test_suggest(self, mocker, num, attr):
+        algo = self.create_algo()
+        spy = self.spy_phase(mocker, num, algo, attr)
+        points = algo.suggest()
+        if num == 0:
+            assert len(points) == N_INIT
+        else:
+            assert len(points) == 1
+
+    def test_int_data(self, mocker, num, attr):
+        if num > 0:
+            pytest.skip("See https://github.com/Epistimio/orion/issues/600")
+        super(TestTPE, self).test_int_data(mocker, num, attr)
+
+    def test_is_done_cardinality(self):
+        # TODO: Support correctly loguniform(discrete=True)
+        #       See https://github.com/Epistimio/orion/issues/566
+        space = self.update_space(
+            {
+                "x": "uniform(0, 4, discrete=True)",
+                "y": "choices(['a', 'b', 'c'])",
+                "z": "uniform(1, 6, discrete=True)",
+            }
+        )
+        space = self.create_space(space)
+        assert space.cardinality == 5 * 3 * 6
+
+        algo = self.create_algo(space=space)
+        for i, (x, y, z) in enumerate(itertools.product(range(5), "abc", range(1, 7))):
+            assert not algo.is_done
+            n = len(algo.algorithm._trials_info)
+            algo.observe([[x, y, z]], [dict(objective=i)])
+            assert len(algo.algorithm._trials_info) == n + 1
+
+        assert i + 1 == space.cardinality
+
+        assert algo.is_done
+
+
+TestTPE.set_phases([("random", 0, "space.sample"), ("bo", N_INIT + 1, "_suggest_bo")])

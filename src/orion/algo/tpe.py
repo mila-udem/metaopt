@@ -146,7 +146,10 @@ class TPE(BaseAlgorithm):
         Seed to sample initial points and candidates points.
         Default: ``None``
     n_initial_points: int
-        Number of initial points randomly sampled.
+        Number of initial points randomly sampled. If new points
+        are requested and less than `n_initial_points` are observed,
+        the next points will also be sampled randomly instead of being
+        sampled from the parzen estimators.
         Default: ``20``
     n_ei_candidates: int
         Number of candidates points sampled for ei compute.
@@ -267,89 +270,130 @@ class TPE(BaseAlgorithm):
         self.seed_rng(state_dict["seed"])
         self.rng.set_state(state_dict["rng_state"])
 
-    def suggest(self, num=1):
+    def _n_suggested(self):
+        return len(self._trials_info)
+
+    def _n_observed(self):
+        return sum(bool(point[1] is not None) for point in self._trials_info.values())
+
+    def suggest(self, num=None):
         """Suggest a `num` of new sets of parameters. Randomly draw samples
         from the import space and return them.
 
+        Parameters
+        ----------
+        num: int, optional
+            Number of points to sample. If None, TPE will sample all random points at once, or a
+            single point if it is at the Bayesian Optimization stage.
         :param num: how many sets to be suggested.
 
         .. note:: New parameters must be compliant with the problem's domain
            `orion.algo.space.Space`.
         """
-        if num > 1:
-            raise ValueError("TPE should suggest only one point.")
-
+        if num is None:
+            num = max(self.n_initial_points - self._n_observed(), 1)
         samples = []
-        if len(self._trials_info) < self.n_initial_points:
-            new_point = self.space.sample(
-                1, seed=tuple(self.rng.randint(0, 1000000, size=3))
-            )[0]
-            samples.append(new_point)
-        else:
-            point = []
-            below_points, above_points = self.split_trials()
+        candidates = []
+        while len(samples) < num and self.n_suggested < self.space.cardinality:
+            if candidates:
+                candidate = candidates.pop(0)
+                if candidate:
+                    self._trials_info[self.get_id(candidate)] = (candidate, None)
+                    samples.append(candidate)
+            elif self._n_observed() < self.n_initial_points:
+                candidates = self._suggest_random(num)
+            else:
+                candidates = self._suggest_bo(max(num - len(samples), 0))
 
-            below_points = [flatten_dims(point, self.space) for point in below_points]
-            above_points = [flatten_dims(point, self.space) for point in above_points]
-            below_points = list(map(list, zip(*below_points)))
-            above_points = list(map(list, zip(*above_points)))
+            if not candidates:
+                break
 
-            idx = 0
-            for i, dimension in enumerate(self.space.values()):
+        if samples:
+            return samples
 
-                shape = dimension.shape
-                if not shape:
-                    shape = (1,)
+        return None
 
-                if dimension.type == "real":
-                    points = self._sample_real_dimension(
-                        dimension,
-                        shape[0],
-                        below_points[idx : idx + shape[0]],
-                        above_points[idx : idx + shape[0]],
-                    )
-                elif (
-                    dimension.type == "integer"
-                    and dimension.prior_name == "int_uniform"
-                ):
-                    points = self.sample_one_dimension(
-                        dimension,
-                        shape[0],
-                        below_points[idx : idx + shape[0]],
-                        above_points[idx : idx + shape[0]],
-                        self._sample_int_point,
-                    )
-                elif (
-                    dimension.type == "categorical"
-                    and dimension.prior_name == "choices"
-                ):
-                    points = self.sample_one_dimension(
-                        dimension,
-                        shape[0],
-                        below_points[idx : idx + shape[0]],
-                        above_points[idx : idx + shape[0]],
-                        self._sample_categorical_point,
-                    )
-                elif dimension.type == "fidelity":
-                    # fidelity dimension
-                    points = [point[i] for point in self.space.sample(num)]
-                else:
-                    raise NotImplementedError()
+    def _suggest(self, num, function):
+        points = []
 
-                if len(points) < shape[0]:
-                    logger.warning(
-                        "TPE failed to sample new point with configuration %s",
-                        self.configuration,
-                    )
-                    return None
+        ids = set(self._trials_info.keys())
+        while len(points) < num:
+            for candidate in function(num - len(points)):
+                candidate_id = self.get_id(candidate)
+                if candidate_id not in ids:
+                    ids.add(candidate_id)
+                    points.append(candidate)
 
-                idx += shape[0]
-                point += points
+                if len(ids) >= self.space.cardinality:
+                    return points
 
-            point = regroup_dims(point, self.space)
-            samples.append(point)
+        return points
 
-        return samples
+    def _suggest_random(self, num):
+        def sample(num):
+            return self.space.sample(
+                num, seed=tuple(self.rng.randint(0, 1000000, size=3))
+            )
+
+        return self._suggest(num, sample)
+
+    def _suggest_bo(self, num):
+        def suggest_bo(num):
+            return [self._suggest_one_bo() for _ in range(num)]
+
+        return self._suggest(num, suggest_bo)
+
+    def _suggest_one_bo(self):
+
+        point = []
+        below_points, above_points = self.split_trials()
+
+        below_points = list(map(list, zip(*below_points)))
+        above_points = list(map(list, zip(*above_points)))
+
+        idx = 0
+        for i, dimension in enumerate(self.space.values()):
+
+            shape = dimension.shape
+            if not shape:
+                shape = (1,)
+
+            if dimension.type == "real":
+                dim_samples = self._sample_real_dimension(
+                    dimension,
+                    shape[0],
+                    below_points[idx : idx + shape[0]],
+                    above_points[idx : idx + shape[0]],
+                )
+            elif dimension.type == "integer" and dimension.prior_name in [
+                "int_uniform",
+                "int_reciprocal",
+            ]:
+                dim_samples = self.sample_one_dimension(
+                    dimension,
+                    shape[0],
+                    below_points[idx : idx + shape[0]],
+                    above_points[idx : idx + shape[0]],
+                    self._sample_int_point,
+                )
+            elif dimension.type == "categorical" and dimension.prior_name == "choices":
+                dim_samples = self.sample_one_dimension(
+                    dimension,
+                    shape[0],
+                    below_points[idx : idx + shape[0]],
+                    above_points[idx : idx + shape[0]],
+                    self._sample_categorical_point,
+                )
+            elif dimension.type == "fidelity":
+                # fidelity dimension
+                dim_samples = [point[i] for point in self.space.sample(1)]
+            else:
+                raise NotImplementedError()
+
+            idx += shape[0]
+            point += dim_samples
+
+        return self.format_point(point)
 
     # pylint:disable=no-self-use
     def sample_one_dimension(
