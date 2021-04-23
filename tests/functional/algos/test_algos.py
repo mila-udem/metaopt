@@ -33,17 +33,17 @@ algorithm_configs = {
             "full_weight_num": 25,
         }
     },
-    "asha": {
-        "asha": {
+    "asha": {"asha": {"seed": 1, "num_rungs": 4, "num_brackets": 1, "repetitions": 2}},
+    "hyperband": {"hyperband": {"repetitions": 5, "seed": 1}},
+    "evolutiones": {
+        "evolutiones": {
+            "mutate": None,
+            "repetitions": 5,
+            "nums_population": 20,
             "seed": 1,
-            "num_rungs": 4,
-            "num_brackets": 1,
-            "grace_period": None,
-            "max_resources": None,
-            "reduction_factor": None,
+            "max_retries": 100,
         }
     },
-    "hyperband": {"hyperband": {"repetitions": 5, "seed": 1}},
 }
 
 no_fidelity_algorithms = ["random", "tpe", "gridsearch"]
@@ -51,7 +51,7 @@ no_fidelity_algorithm_configs = {
     key: algorithm_configs[key] for key in no_fidelity_algorithms
 }
 
-fidelity_only_algorithms = ["asha", "hyperband"]
+fidelity_only_algorithms = ["asha", "hyperband", "evolutiones"]
 fidelity_only_algorithm_configs = {
     key: algorithm_configs[key] for key in fidelity_only_algorithms
 }

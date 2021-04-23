@@ -13,7 +13,7 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-def default_mutate(search_space, old_value, **kwargs):
+def default_mutate(search_space, rng, old_value, **kwargs):
     """Get a default mutate function"""
     multiply_factor = kwargs.pop("multiply_factor", 3.0)
     add_factor = kwargs.pop("add_factor", 1)
@@ -22,17 +22,18 @@ def default_mutate(search_space, old_value, **kwargs):
         lower_bound, upper_bound = search_space.interval()
         factors = (
             1.0 / multiply_factor
-            + (multiply_factor - 1.0 / multiply_factor) * np.random.random()
+            + (multiply_factor - 1.0 / multiply_factor) * rng.random()
         )
         if lower_bound <= old_value * factors <= upper_bound:
             new_value = old_value * factors
         elif lower_bound > old_value * factors:
-            new_value = lower_bound + volatility * np.random.random()
+            new_value = lower_bound + volatility * rng.random()
         else:
-            new_value = upper_bound - volatility * np.random.random()
+            new_value = upper_bound - volatility * rng.random()
     elif search_space.type == "integer":
+        print(search_space)
         lower_bound, upper_bound = search_space.interval()
-        factors = int(add_factor * (2 * np.random.randint(2) - 1))
+        factors = int(add_factor * (2 * rng.randint(2) - 1))
         if lower_bound <= old_value + factors <= upper_bound:
             new_value = int(old_value) + factors
         elif lower_bound > old_value + factors:
@@ -40,10 +41,12 @@ def default_mutate(search_space, old_value, **kwargs):
         else:
             new_value = int(upper_bound)
     elif search_space.type == "categorical":
-        sample_index = np.where(
-            np.random.multinomial(1, list(search_space.get_prior)) == 1
-        )[0][0]
-        new_value = int(search_space.categories[sample_index])
+        # TODO: This ignores the probabilities passed to search space.
+        #       The mutation function should work directly at the search space level
+        #       instead of separately on each dimensions. This would make it possible
+        #       to sample properly the categorical dimensions.
+        new_value = rng.choice(search_space.interval())
     else:
+        print(search_space.type)
         new_value = old_value
     return new_value

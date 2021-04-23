@@ -280,19 +280,6 @@ def OrionState(*args, **kwargs):
     return BaseOrionState(*args, **kwargs)
 
 
-def customized_mutate_example(search_space, old_value, **kwargs):
-    """Define a customized mutate function example"""
-    multiply_factor = kwargs.pop("multiply_factor", 3.0)
-    add_factor = kwargs.pop("add_factor", 1)
-    if search_space.type == "real":
-        new_value = old_value / multiply_factor
-    elif search_space.type == "integer":
-        new_value = int(old_value + add_factor)
-    else:
-        new_value = old_value
-    return new_value
-
-
 def _get_default_test_storage():
     """Return default configuration for the test storage"""
     return {"type": "legacy", "database": {"type": "PickledDB", "host": "${file}"}}
