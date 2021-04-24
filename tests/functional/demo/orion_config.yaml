@@ -1,7 +1,7 @@
 name: voila_voici
 
 pool_size: 1
-max_trials: 100
+max_trials: 20
 max_broken: 5
 
 algorithms:
