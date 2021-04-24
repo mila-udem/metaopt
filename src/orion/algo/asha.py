@@ -3,10 +3,10 @@
 Asynchronous Successive Halving Algorithm
 =========================================
 """
-from collections import defaultdict
 import copy
 import hashlib
 import logging
+from collections import defaultdict
 
 import numpy
 

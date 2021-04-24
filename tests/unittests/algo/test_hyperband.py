@@ -8,7 +8,7 @@ import logging
 import numpy as np
 import pytest
 
-from orion.algo.hyperband import HyperbandBracket, Hyperband, compute_budgets
+from orion.algo.hyperband import Hyperband, HyperbandBracket, compute_budgets
 from orion.algo.space import Fidelity, Integer, Real, Space
 from orion.testing.algo import BaseAlgoTests
 

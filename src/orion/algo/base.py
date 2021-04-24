@@ -12,8 +12,8 @@ import hashlib
 import logging
 from abc import ABCMeta, abstractmethod
 
-from orion.core.utils import Factory
 from orion.algo.space import Fidelity
+from orion.core.utils import Factory
 
 log = logging.getLogger(__name__)
 

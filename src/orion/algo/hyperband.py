@@ -6,10 +6,10 @@ A Novel Bandit-Based Approach to Hyperparameter Optimization
 Implement Hyperband to exploit configurations with fixed resource efficiently
 
 """
-from collections import OrderedDict
 import copy
 import hashlib
 import logging
+from collections import OrderedDict
 
 import numpy
 from tabulate import tabulate

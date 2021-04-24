@@ -12,7 +12,7 @@ import logging
 
 import numpy as np
 
-from orion.algo.hyperband import HyperbandBracket, Hyperband
+from orion.algo.hyperband import Hyperband, HyperbandBracket
 
 logger = logging.getLogger(__name__)
 
