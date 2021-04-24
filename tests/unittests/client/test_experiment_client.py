@@ -681,7 +681,7 @@ class TestSuggest:
             """Never suggest a new trial"""
             return None
 
-        monkeypatch.setattr(orion.core.config.worker, "max_idle_time", 0)
+        monkeypatch.setattr(orion.core.config.worker, "max_idle_time", -1)
 
         with create_experiment(config, base_trial, statuses=["completed"]) as (
             cfg,
