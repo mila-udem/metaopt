@@ -10,7 +10,6 @@ import itertools
 from tabulate import tabulate
 
 from orion.client import create_experiment
-from .benchmark import Benchmark
 
 class Study:
     """
