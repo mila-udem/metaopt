@@ -177,7 +177,7 @@ def test_with_multidim(algorithm):
     assert exp.configuration["algorithms"] == algorithm
 
     trials = exp.fetch_trials()
-    assert len(trials) >= 25 # Grid-search is a bit smaller
+    assert len(trials) >= 25  # Grid-search is a bit smaller
     completed_trials = exp.fetch_trials_by_status("completed")
     assert len(completed_trials) >= MAX_TRIALS or len(completed_trials) == len(trials)
 
