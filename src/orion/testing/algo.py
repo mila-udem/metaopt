@@ -592,7 +592,7 @@ class BaseAlgoTests:
 
         assert algo.is_done
 
-    def test_optimize_rosenbrock(self):
+    def test_optimize_branin(self):
         """Test that algorithm optimizes somehow (this is on-par with random search)"""
         MAX_TRIALS = 20
         task = Branin()

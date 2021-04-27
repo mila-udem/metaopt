@@ -4,6 +4,7 @@
 Task for Branin Function
 =========================
 """
+import copy
 import math
 
 import numpy
@@ -21,8 +22,9 @@ class Branin(BaseTask):
 
     def call(self, x):
         """Evaluate a 2-D branin function."""
-        x[0] = (x[1] * 15) - 5
-        x[1] = x[0] * 15
+        x = copy.deepcopy(x)
+        x[0] = (x[0] * 15) - 5
+        x[1] = x[1] * 15
 
         a = 1
         b = 5.1 / (4 * numpy.square(math.pi))
@@ -40,6 +42,6 @@ class Branin(BaseTask):
 
     def get_search_space(self):
         """Return the search space for the task objective function"""
-        rspace = {"x": "uniform(0, 1, shape=2)"}
+        rspace = {"x": "uniform(0, 1, shape=2, precision=10)"}
 
         return rspace

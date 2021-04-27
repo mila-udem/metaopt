@@ -435,7 +435,7 @@ class TestGenericEvolutionES(BaseAlgoTests):
         assert algo.is_done
 
     @pytest.mark.skip(reason="See https://github.com/Epistimio/orion/issues/599")
-    def test_optimize_rosenbrock(self):
+    def test_optimize_branin(self):
         pass
 
     def infer_repetition_and_rung(self, num):
