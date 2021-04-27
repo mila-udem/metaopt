@@ -25,6 +25,7 @@ algorithms = {
 
 
 def recursive_getattr(obj, attribute):
+    """Get attribute recursively based on str with pattern sub.(sub.)*name"""
     attributes = attribute.split(".")
 
     attribute = getattr(obj, attributes[0])
@@ -35,13 +36,11 @@ def recursive_getattr(obj, attribute):
 
 
 def spy_attr(mocker, algo, attribute):
+    """Return a mocker.spy object on the algorithms's given `attribute`"""
     attributes = attribute.split(".")
     attr_to_mock = attributes[-1]
     if len(attributes) > 1:
-        # try:
         obj = recursive_getattr(algo, ".".join(attributes[:-1]))
-        # except AttributeError:
-        #     return mocker.patch(attribute)  # , autospec=True)
     else:
         obj = algo
     return mocker.spy(obj, attr_to_mock)
@@ -51,6 +50,7 @@ methods_with_phase = set()
 
 
 def phase(method):
+    """Decorator to mark methods that must be parametrized with phases."""
     methods_with_phase.add(method.__name__)
     method.__doc__ += (
         "\n\nThis test is parametrizable with phases. See "
@@ -61,9 +61,13 @@ def phase(method):
 
 
 def parametrize_this(cls, method_name, attrs, ids):
-    # Need to replace the method to avoid parametrizing the base one.
-    # This is a fugly hack because of pytest limitations with inheritance for test classes.
-    # method = getattr(cls, method_name)
+    """Parametrize a method with phases.
+
+    Notes
+    -----
+    We need to replace the method to avoid parametrizing the base one.
+    This is a fugly hack because of pytest limitations with inheritance for test classes.
+    """
 
     base_method = getattr(cls, method_name)
 
@@ -72,7 +76,6 @@ def parametrize_this(cls, method_name, attrs, ids):
         return base_method(self, mocker, num, attr)
 
     setattr(cls, method_name, method)
-    # End of fugly hack
 
     pytest.mark.parametrize("num,attr", attrs, ids=ids)(method)
 
