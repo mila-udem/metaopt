@@ -34,7 +34,7 @@ requirements:
     - gunicorn
     - scikit-learn
     - psutil
-    - pytest >= 3.0.0
+    - pytest >=3.0.0
 
 test:
   import:
