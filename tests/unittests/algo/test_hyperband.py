@@ -107,7 +107,7 @@ def test_compute_budgets():
 def force_observe(hyperband, point, results):
     # hyperband.sampled.add(hashlib.md5(str(list(point)).encode("utf-8")).hexdigest())
 
-    hypenband.register(point, results)
+    hyperband.register(point, results)
 
     bracket = hyperband._get_bracket(point)
     id_wo_fidelity = hyperband.get_id(point, ignore_fidelity=True)
