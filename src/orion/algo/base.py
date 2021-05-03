@@ -260,7 +260,22 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         """
         for point, result in zip(points, results):
             if not self.has_observed(point):
-                self._trials_info[self.get_id(point)] = (point, result)
+                self.register(point, result)
+
+    def register(self, point, result=None):
+        """Save the point as one suggested or observed by the algorithm
+
+        Parameters
+        ----------
+        point : array-likes
+           Point from a `orion.algo.space.Space`.
+        result : dict or None, optional
+           The result of an evaluation; partial information about the
+           black-box function at each point in `params`.
+           None is suggested and not yet completed.
+
+        """
+        self._trials_info[self.get_id(point)] = (point, result)
 
     @property
     def n_suggested(self):
@@ -318,10 +333,10 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         By default, the cardinality of the specified search space will be used to check
         if all possible sets of parameters has been tried.
         """
-        if len(self._trials_info) >= self.space.cardinality:
+        if self.n_suggested >= self.space.cardinality:
             return True
 
-        if len(self._trials_info) >= getattr(self, "max_trials", float("inf")):
+        if self.n_suggested >= getattr(self, "max_trials", float("inf")):
             return True
 
         return False

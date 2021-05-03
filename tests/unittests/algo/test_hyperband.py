@@ -107,8 +107,7 @@ def test_compute_budgets():
 def force_observe(hyperband, point, results):
     # hyperband.sampled.add(hashlib.md5(str(list(point)).encode("utf-8")).hexdigest())
 
-    full_id = hyperband.get_id(point, ignore_fidelity=False)
-    hyperband._trials_info[full_id] = (point, results)
+    hypenband.register(point, results)
 
     bracket = hyperband._get_bracket(point)
     id_wo_fidelity = hyperband.get_id(point, ignore_fidelity=True)
@@ -792,13 +791,13 @@ class TestGenericHyperband(BaseAlgoTests):
 
             points = []
             assert not algo.is_done
-            n_sampled = len(algo.algorithm._trials_info)
+            n_sampled = algo.n_suggested
             n_trials = len(algo.algorithm.trial_to_brackets)
             new_points = algo.suggest()
             if not new_points:
                 break
             points += new_points
-            assert len(algo.algorithm._trials_info) == n_sampled + len(new_points)
+            assert algo.n_suggested == n_sampled + len(new_points)
             assert len(algo.algorithm.trial_to_brackets) == space.cardinality
 
             # We reached max number of trials we can suggest before observing any.

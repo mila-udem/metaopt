@@ -728,9 +728,9 @@ class TestTPE(BaseAlgoTests):
         algo = self.create_algo(space=space)
         for i, (x, y, z) in enumerate(itertools.product(range(5), "abc", range(1, 7))):
             assert not algo.is_done
-            n = len(algo.algorithm._trials_info)
+            n = algo.n_suggested
             algo.observe([[x, y, z]], [dict(objective=i)])
-            assert len(algo.algorithm._trials_info) == n + 1
+            assert algo.n_suggested == n + 1
 
         assert i + 1 == space.cardinality
 

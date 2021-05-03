@@ -292,7 +292,7 @@ class TPE(BaseAlgorithm):
             if candidates:
                 candidate = candidates.pop(0)
                 if candidate:
-                    self._trials_info[self.get_id(candidate)] = (candidate, None)
+                    self.register(candidate)
                     samples.append(candidate)
             elif self.n_observed < self.n_initial_points:
                 candidates = self._suggest_random(num)

@@ -210,7 +210,7 @@ class GridSearch(BaseAlgorithm):
         while len(points) < num and i < len(self.grid):
             point = self.grid[i]
             if not self.has_suggested(point):
-                self._trials_info[self.get_id(point)] = (point, None)
+                self.register(point)
                 points.append(point)
             i += 1
 
@@ -222,7 +222,7 @@ class GridSearch(BaseAlgorithm):
         return (
             super(GridSearch, self).is_done
             or self.grid is not None
-            and len(self._trials_info) >= len(self.grid)
+            and self.n_suggested >= len(self.grid)
         )
 
     @property

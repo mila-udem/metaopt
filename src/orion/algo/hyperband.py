@@ -191,7 +191,7 @@ class Hyperband(BaseAlgorithm):
             id_wo_fidelity = self.get_id(point, ignore_fidelity=True)
             bracket_observed = self.trial_to_brackets.get(id_wo_fidelity)
 
-            if full_id not in self._trials_info and (
+            if not self.has_suggested(point) and (
                 not bracket_observed
                 or (
                     bracket_observed.repetition_id < bracket.repetition_id
@@ -203,7 +203,7 @@ class Hyperband(BaseAlgorithm):
                 # execution with less resource
 
                 points.append(tuple(point))
-                self._trials_info[full_id] = (point, None)
+                self.register(point)
                 self.trial_to_brackets[id_wo_fidelity] = bracket
 
         return points
@@ -253,20 +253,14 @@ class Hyperband(BaseAlgorithm):
     def register_samples(self, bracket, samples):
         for sample in samples:
             full_id = self.get_id(sample, ignore_fidelity=False)
-            if (
-                full_id in self._trials_info
-                and self._trials_info[full_id][1] is not None
-            ):
+            if self.has_observed(sample):
                 raise RuntimeError(
                     "Hyperband resampling a trial that was already completed. "
                     "This should never happen. "
                     "If you get this error please report this issue on github at "
                     "https://github.com/Epistimio/orion/issues/new/choose"
                 )
-            self._trials_info[self.get_id(sample, ignore_fidelity=False)] = (
-                sample,
-                None,
-            )
+            self.register(sample)
             bracket.register(sample, None)
 
             if self.get_id(sample, ignore_fidelity=True) not in self.trial_to_brackets:
@@ -433,10 +427,7 @@ class Hyperband(BaseAlgorithm):
                 )
                 continue
 
-            self._trials_info[self.get_id(point, ignore_fidelity=False)] = (
-                point,
-                result,
-            )
+            self.register(point, result)
 
             bracket = self._get_bracket(point)
 

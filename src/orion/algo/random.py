@@ -63,7 +63,7 @@ class Random(BaseAlgorithm):
             seed = tuple(self.rng.randint(0, 1000000, size=3))
             new_point = self.space.sample(1, seed=seed)[0]
             if not self.has_suggested(new_point):
-                self._trials_info[self.get_id(new_point)] = (new_point, None)
+                self.register(new_point)
                 points.append(new_point)
 
         return points

@@ -97,7 +97,7 @@ def rung_2(rung_1):
 def force_observe(asha, point, results):
 
     full_id = asha.get_id(point, ignore_fidelity=False)
-    asha._trials_info[full_id] = (point, results)
+    asha.register(point, results)
 
     bracket = asha._get_bracket(point)
     id_wo_fidelity = asha.get_id(point, ignore_fidelity=True)
@@ -431,10 +431,7 @@ class TestASHA:
         )
         asha.trial_to_brackets[duplicate_id_wo_fidelity] = bracket
 
-        asha._trials_info[asha.get_id(duplicate_point, ignore_fidelity=False)] = (
-            duplicate_point,
-            0.0,
-        )
+        asha.register(duplicate_point, 0.0)
 
         points = [duplicate_point, new_point]
 
