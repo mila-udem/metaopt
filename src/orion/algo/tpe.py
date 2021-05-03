@@ -270,12 +270,6 @@ class TPE(BaseAlgorithm):
         self.seed_rng(state_dict["seed"])
         self.rng.set_state(state_dict["rng_state"])
 
-    def _n_suggested(self):
-        return len(self._trials_info)
-
-    def _n_observed(self):
-        return sum(bool(point[1] is not None) for point in self._trials_info.values())
-
     def suggest(self, num=None):
         """Suggest a `num` of new sets of parameters. Randomly draw samples
         from the import space and return them.
@@ -291,7 +285,7 @@ class TPE(BaseAlgorithm):
            `orion.algo.space.Space`.
         """
         if num is None:
-            num = max(self.n_initial_points - self._n_observed(), 1)
+            num = max(self.n_initial_points - self.n_observed, 1)
         samples = []
         candidates = []
         while len(samples) < num and self.n_suggested < self.space.cardinality:
@@ -300,7 +294,7 @@ class TPE(BaseAlgorithm):
                 if candidate:
                     self._trials_info[self.get_id(candidate)] = (candidate, None)
                     samples.append(candidate)
-            elif self._n_observed() < self.n_initial_points:
+            elif self.n_observed < self.n_initial_points:
                 candidates = self._suggest_random(num)
             else:
                 candidates = self._suggest_bo(max(num - len(samples), 0))
