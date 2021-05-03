@@ -11,6 +11,7 @@ from tabulate import tabulate
 
 from orion.client import create_experiment
 
+
 class Study:
     """
     A study is one assessment and task combination in the `Benchmark` targets. It will
@@ -103,13 +104,15 @@ class Study:
                 if algorithm.is_deterministic and task_index > 0:
                     continue
 
-                experiment_name = "_".join([
-                    self.benchmark.name,
-                    self.assess_name,
-                    self.task_name,
-                    str(task_index),
-                    str(algo_index),
-                ])
+                experiment_name = "_".join(
+                    [
+                        self.benchmark.name,
+                        self.assess_name,
+                        self.task_name,
+                        str(task_index),
+                        str(algo_index),
+                    ]
+                )
 
                 experiment = create_experiment(
                     experiment_name,
@@ -136,24 +139,22 @@ class Study:
 
             algorithm_name = list(experiment.configuration["algorithms"].keys())[0]
 
-            if algorithm_tasks.get(algorithm_name, None) is None:
-                task_state = {
+            task_state = algorithm_tasks.setdefault(
+                algorithm_name,
+                {
                     "algorithm": algorithm_name,
                     "experiments": 0,
                     "assessment": self.assess_name,
                     "task": self.task_name,
                     "completed": 0,
                     "trials": 0,
-                }
-            else:
-                task_state = algorithm_tasks[algorithm_name]
+                },
+            )
 
             task_state["experiments"] += 1
             task_state["trials"] += len(trials)
             if experiment.is_done:
                 task_state["completed"] += 1
-
-            algorithm_tasks[algorithm_name] = task_state
 
         return list(algorithm_tasks.values())
 

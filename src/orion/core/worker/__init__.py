@@ -81,9 +81,10 @@ def workon(
     user_script_config=None,
     interrupt_signal_code=None,
     ignore_code_changes=None,
+    knowledge_base=None,
 ):
     """Try to find solution to the search problem defined in `experiment`."""
-    producer = Producer(experiment, max_idle_time)
+    producer = Producer(experiment, max_idle_time, knowledge_base=knowledge_base)
     consumer = Consumer(
         experiment,
         heartbeat,

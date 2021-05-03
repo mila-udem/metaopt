@@ -12,55 +12,17 @@ import numpy as np
 from orion.algo.base import BaseAlgorithm, infer_trial_id
 from orion.algo.space import Categorical, Space
 from orion.client import ExperimentClient
-from orion.core.utils.format_trials import trial_to_tuple
+from orion.core.utils.format_trials import trial_to_tuple, tuple_to_trial, dict_to_trial
 from orion.core.worker.experiment import Experiment
 from orion.core.worker.primary_algo import PrimaryAlgo
 from orion.core.worker.trial import Trial
 from orion.storage.base import Storage
 
 from .algo_wrapper import AlgoWrapper, Point
+
 log = getLogger(__file__)
 
-
-class AbstractKnowledgeBase(ABC):
-    """ Abstract Base Class for the KnowledgeBase, which currently isn't part of the
-    Orion codebase.
-    """
-    def __init__(self, path_or_storage: Union[str, Storage] = None):
-        pass
-
-    @abstractmethod
-    def get_reusable_trials(
-        self,
-        target_experiment: Union[Experiment, ExperimentClient],
-        max_trials: int = None,
-    ) -> Dict["ExperimentInfo", List[Trial]]:
-        """ Retrieve experiments 'similar' to `target_experiment` and their trials.
-
-        When `max_trials` is given, only up to `max_trials` are returned in total for
-        all experiments.
-
-        Parameters
-        ----------
-        target_experiment : Union[Experiment, ExperimentClient]
-            The target experiment, or experiment client.
-        max_trials : int, optional
-            Maximum total number of trials to fetch. By default `None`, in which case
-            all trials from all 'related' experiments are returned. 
-
-        Returns
-        -------
-        Dict[ExperimentInfo, List[Trial]]
-            Dictionary mapping from `ExperimentInfo` objects to a list of trials from
-            that experiment.
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def n_stored_experiments(self) -> int:
-        """ Returns the current number of experiments registered the Knowledge base. """
-        pass
+from .knowledge_base import AbstractKnowledgeBase
 
 
 class WarmStarteable(ABC):
@@ -120,7 +82,9 @@ def is_warm_starteable(
     if isinstance(algo_or_config, dict):
         first_key = list(algo_or_config)[0]
         return len(algo_or_config) == 1 and is_warm_starteable(first_key)
-    return isinstance(algo_or_config.unwrapped, WarmStarteable)
+    return isinstance(
+        getattr(algo_or_config, "unwrapped", algo_or_config), WarmStarteable
+    )
 
 
 class MultiTaskAlgo(AlgoWrapper):
@@ -147,6 +111,9 @@ class MultiTaskAlgo(AlgoWrapper):
             self._enabled = False
             return  # Return, just to indicate we don't do the other modifications below.
         else:
+            log.info(
+                "Chosen algorithm is NOT warm-starteable, enabling this multi-task wrapper."
+            )
             self._enabled = True
 
         # Figure out the number of potential tasks using the KB.
@@ -181,8 +148,9 @@ class MultiTaskAlgo(AlgoWrapper):
         self.current_task_id = 0
         assert "task_id" not in self._space
         assert "task_id" not in self.space
-        assert "task_id" in self.algorithm.transformed_space
-        assert "task_id" in self.algorithm.space
+        # TODO: For some optimizers this exact key won't be found, there is a View(OneHotEncode(...))
+        # assert "task_id" in self.algorithm.transformed_space, self.algorithm.transformed_space
+        # assert "task_id" in self.algorithm.space
         self.transformed_space = self.space
 
     def suggest(self, num: int = 1) -> List[Point]:
@@ -196,9 +164,11 @@ class MultiTaskAlgo(AlgoWrapper):
         points = self.algorithm.suggest(num=num)
         if not self._enabled:
             return points
+
         # Remove the task ids from these points:
         # NOTE: These predicted task ids aren't currently used.
-        points_without_task_ids, _ = zip(*[(point[:-1], point[-1]) for point in points])
+
+        points_without_task_ids = [self._remove_task_id(point) for point in points]
         for point in points_without_task_ids:
             if point not in self.space:
                 raise ValueError(
@@ -223,8 +193,31 @@ class MultiTaskAlgo(AlgoWrapper):
         # Add the task ids to the points, because we assume that the points passed to
         # `observe` are from the current task.
         if self._enabled:
-            points = [point + (self.current_task_id,) for point in points]
+            # Add the task ids to the points.
+            points = [
+                self._add_task_id(point, self.current_task_id) for point in points
+            ]
         return self.algorithm.observe(points, results)
+
+    def _add_task_id(self, point: Tuple, task_id: int) -> Tuple:
+        # NOTE: Need to do a bit of gymnastics here because the points are expected
+        # to be tuples. In order to add the task id at the right index, we convert
+        # them like so:
+        # Tuple -> Trial -> dict (.params) -> dict (add task_id) -> Trial -> Tuple.
+        trial = tuple_to_trial(point, self.space)
+        params = trial.params.copy()
+        params["task_id"] = task_id
+        trial_with_task_id = dict_to_trial(params, self.algorithm.space)
+        point_with_task_id = trial_to_tuple(trial_with_task_id, self.algorithm.space)
+        return point_with_task_id
+
+    def _remove_task_id(self, point: Tuple) -> Tuple:
+        trial = tuple_to_trial(point, self.algorithm.space)
+        params = trial.params.copy()
+        _ = params.pop("task_id")
+        trial_without_task_id = dict_to_trial(params, self.space)
+        point_without_task_id = trial_to_tuple(trial_without_task_id, self.space)
+        return point_without_task_id
 
     def warm_start(self, warm_start_trials: Dict[Mapping, List[Trial]]) -> None:
         """ Use the given trials to warm-start the algorithm.
@@ -262,47 +255,61 @@ class MultiTaskAlgo(AlgoWrapper):
             # from warmstart.utils.api_config import hparam_class_from_orion_space_dict
             # exp_hparam_class = hparam_class_from_orion_space_dict(exp_space)
             log.debug(f"Experiment {experiment_info.name} has {len(trials)} trials.")
+            n_incompatible_trials = 0
 
             for trial in trials:
                 try:
+                    # TODO: Use something smarter than `trial_to_tuple`, since it
+                    # doesn't adjust the points if it's just missing a default value.
                     point = trial_to_tuple(trial=trial, space=self.space)
                     # Drop the point if it doesn't fit inside the current space.
                     # TODO: Do we want to 'translate' the point in this case?
                     # if self.translate_points:
                     #     point = self.translator.translate(point)
                     if point not in self.space:
-                        continue
+                        raise ValueError
                     # Add the task id to the point:
                     # The task ID of the given experiment is `i + 1`, so that the task
                     # id 0 is reserved for the trials of the current task.
                     # TODO: This assumes that the trials from the knowledge base don't
                     # include those of the current experiment.
                     task_id = i + 1
-
-                    point = point + (task_id,)
+                    point = self._add_task_id(point, task_id)
                     compatible_trials.append(trial)
                     compatible_points.append(point)
                 except ValueError as e:
                     log.error(f"Can't reuse trial {trial}: {e}")
+                    n_incompatible_trials += 1
+
+            total_trials = len(trials)
+            n_compatible_trials = total_trials - n_incompatible_trials
+            log.info(
+                f"Experiment {experiment_info.name} has {len(trials)} trials in "
+                f"total, out of which {n_compatible_trials} were found to be "
+                f"compatible with the target experiment."
+            )
+
+        if not compatible_trials:
+            log.info("No compatible trials detected.")
+            return
+
+        # Only keep trials that are new.
+        new_trials_and_points = list(
+            zip(
+                *[
+                    (trial, point)
+                    for trial, point in zip(compatible_trials, compatible_points)
+                    if infer_trial_id(point) not in self.unwrapped._warm_start_trials
+                ]
+            )
+        )
+        if not new_trials_and_points:
+            log.info("No new new warm-starting trials detected.")
+            return
 
         with self.algorithm.warm_start_mode():
-            # Only keep trials that are new.
-            new_trials_and_points = list(
-                zip(
-                    *[
-                        (trial, point)
-                        for trial, point in zip(compatible_trials, compatible_points)
-                        if infer_trial_id(point)
-                        not in self.unwrapped._warm_start_trials
-                    ]
-                )
-            )
-            if not new_trials_and_points:
-                log.info("No new warm-starting trials detected.")
-                return
             new_trials, new_points = new_trials_and_points
             results = [trial.objective for trial in new_trials]
-
             log.info(f"About to observe {len(new_points)} new warm-starting points!")
             self.algorithm.observe(new_points, results)
 
@@ -315,7 +322,7 @@ class MultiTaskAlgo(AlgoWrapper):
         """
         assert point in self.space
         if self._enabled:
-            point = point + (self.current_task_id,)
+            point = self._add_task_id(point, self.current_task_id)
         return self.algorithm.score(point)
 
     def judge(self, point: Point, measurements: Any) -> Optional[Dict]:
@@ -327,7 +334,7 @@ class MultiTaskAlgo(AlgoWrapper):
         """
         assert point in self._space
         if self._enabled:
-            point = point + (self.current_task_id,)
+            point = self._add_task_id(point, self.current_task_id)
         return self.algorithm.judge(
             self.transformed_space.transform(point), measurements
         )

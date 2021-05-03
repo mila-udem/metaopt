@@ -8,6 +8,7 @@ import copy
 import itertools
 
 from tabulate import tabulate
+from .study import Study
 
 
 class Benchmark:
