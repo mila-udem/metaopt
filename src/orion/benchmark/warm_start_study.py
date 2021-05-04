@@ -11,6 +11,7 @@ from orion.core.worker.producer import Producer
 from tabulate import tabulate
 
 from .assessment.base import BaseAssess
+from .assessment.warm_start_efficiency import WarmStartEfficiency
 from .benchmark import Benchmark
 from .study import Study
 from .task.base import BaseTask
@@ -35,6 +36,30 @@ def is_deterministic(algorithm: Union[str, Dict[str, Any], BaseAlgorithm]) -> bo
         if len(algorithm) > 1 or algorithm.get("algorithm"):
             return algorithm.get("deterministic", False)
     return getattr(algorithm, "deterministic", False)
+
+
+def get_algorithm_name(algorithm: Union[str, Dict, BaseAlgorithm]) -> str:
+    """Get the name of the given algorithm or algo config or algo instance.
+
+    Parameters
+    ----------
+    algorithm : Union[str, Dict, BaseAlgorithm]
+        Algorithm or config.
+
+    Returns
+    -------
+    str
+        Its name.
+    """
+    if isinstance(algorithm, str):
+        return algorithm
+    if isinstance(algorithm, dict):
+        if len(algorithm) == 1:
+            first_key = list(algorithm.keys())[0]
+            return first_key
+    if isinstance(algorithm, BaseAlgorithm):
+        return getattr(algorithm, "name", type(algorithm).__name__)
+    return NotImplementedError(algorithm)
 
 
 class WarmStartStudy(Study):
@@ -98,113 +123,182 @@ class WarmStartStudy(Study):
         self.warm_start_seed: Optional[int] = warm_start_seed
         self.debug = debug
 
-        # Dict mapping from some kind of key (TODO) to a list of the (cold, warm, hot)
-        # experiment clients for each repetition.
-        self.experiments_info: Dict[
-            str, List[Tuple[ExperimentClient, ExperimentClient, ExperimentClient]]
-        ] = {}
-
-    def setup_experiments(self):
-        """Setup experiments to run of the study"""
-        n_required_tasks = self.assessment.task_num
-        target_task_name = getattr(
+        self.target_task_name: str = getattr(
             self.target_task, "name", type(self.target_task).__name__
         )
-        self.experiments_info.clear()
-        for algo_index, algorithm in enumerate(self.algorithms):
-            self.experiments_info[algo_index] = []
+        # Number of repetitions to perform for each algo / task combination.
+        # Each repetition will use a different seed for the warm-start trials.
+        # TODO: Also use a different seed for the algo?
+        self.repetitions: int = self.assessment.task_num
 
-            for task_repetition_index in range(n_required_tasks):
-                # Create the Cold / Warm / Hot Knowledge bases:
-                # Cold start KB: Start with no previous trials.
-                cold_start_kb = self.knowledge_base_type()
-                assert cold_start_kb.n_stored_experiments == 0
+        # Dict mapping from some kind of key (TODO) to a list of the (cold, warm, hot)
+        # experiment clients for each repetition.
+        # self.experiments_info: Dict[
+        #     int, List[Tuple[ExperimentClient, ExperimentClient, ExperimentClient]]
+        # ] = {}
 
-                warm_start_kb = self.knowledge_base_type()
-                for source_task in self.source_tasks:
-                    # Add randomly sampled trials from each source task to the warm KB.
-                    source_task_name = getattr(
-                        source_task, "name", type(source_task).__name__
-                    )
-                    dummy_hot_start_exp_name = "_".join(
-                        [
-                            self.benchmark.name,
-                            self.assess_name,
-                            source_task_name,
-                            str(task_repetition_index),
-                            str(algo_index),
-                            "dummy_warm",
-                        ]
-                    )
-                    # Use a different seed for the sampling of the warm-start trials for
-                    # each repetition.
-                    seed = (self.warm_start_seed or 0) + task_repetition_index
-                    dummy_warm_start_experiment = create_experiment(
-                        name=dummy_hot_start_exp_name,
-                        space=source_task.get_search_space(),
-                        algorithms={"random": {"seed": seed}},
-                        max_trials=source_task.max_trials,
-                        debug=True,
-                    )
-                    # TODO: Do we want to run this dummy experiment now? or later?
-                    logger.info(
-                        f"Sampling trials for the dummy 'warm-start' experiment "
-                        f"{dummy_warm_start_experiment}"
-                    )
-                    dummy_warm_start_experiment.workon(
-                        source_task, max_trials=source_task.max_trials
-                    )
-                    warm_start_kb.add_experiment(dummy_warm_start_experiment)
-                assert warm_start_kb.n_stored_experiments == len(self.source_tasks)
+        # self.cold_start_kbs: List[AbstractKnowledgeBase] = []
+        self.warm_start_kbs: List[AbstractKnowledgeBase] = []
+        self.hot_start_kbs: List[AbstractKnowledgeBase] = []
 
-                # Add randomly sampled trials from the target task to the hot-start KB.
-                hot_start_kb = self.knowledge_base_type()
-                # Create a 'source' experiment for the Hot-start experiment.
+        # Lists containing the 'source' experiments for the warm-start and hot-start
+        # experiments. In the case of warm-start it is a list of lists, since there may
+        # be more than one source experiment to warm-start from.
+        self.dummy_warm_experiments: List[List[ExperimentClient]] = []
+        self.dummy_hot_experiments: List[ExperimentClient] = []
+
+        # Lists that hold the cold / warm / hot experiments, for each algorithm, for
+        # each repetition.
+        self.cold_start_experiments: List[List[ExperimentClient]] = []
+        self.warm_start_experiments: List[List[ExperimentClient]] = []
+        self.hot_start_experiments: List[List[ExperimentClient]] = []
+
+    def _setup_source_experiments(self):
+        """ Create the experiments containing the 'previous' trials to be used to
+        warm-start and hot-start the algorithms.
+
+        The trials are sampled using random search. All algorithms share the same
+        knowledge base, for a given repetition index.
+        The random search algorithm uses a different seed for each run.
+
+        NOTE: This registers these warm and hot "source" experiments into the
+        corresponding knowledge base, but doesn't actually call 'workon'. However, since
+        the experiments are registered in the KB, calling workon on the experiment
+        client will make those trials available in the KB as well.
+        """
+        for task_repetition_index in range(self.repetitions):
+            # Get the Cold / Warm / Hot Knowledge bases:
+            # NOTE: Not actually creating a Knowledge base for cold-start, see note
+            # below.
+            # Cold start KB: Start with no previous trials.
+            # cold_start_kb = self.knowledge_base_type()
+            # assert cold_start_kb.n_stored_experiments == 0
+            warm_start_kb = self.warm_start_kbs[task_repetition_index]
+            hot_start_kb = self.hot_start_kbs[task_repetition_index]
+
+            dummy_warm_start_experiments = []
+            for source_task_index, source_task in enumerate(self.source_tasks):
+                # Add randomly sampled trials from each source task to the warm KB.
+                source_task_name = getattr(
+                    source_task, "name", type(source_task).__name__
+                )
                 dummy_hot_start_exp_name = "_".join(
                     [
                         self.benchmark.name,
                         self.assess_name,
-                        target_task_name,
+                        source_task_name,
                         str(task_repetition_index),
-                        str(algo_index),
-                        "dummy_hot",
+                        "dummy_warm",
                     ]
                 )
-                seed = (self.warm_start_seed or 0) + task_repetition_index
-                dummy_hot_start_experiment = create_experiment(
+                # Use a different seed for the sampling of the warm-start trials for
+                # each repetition.
+                seed = (
+                    (self.warm_start_seed or 0)
+                    + task_repetition_index
+                    + source_task_index
+                )
+                dummy_warm_start_experiment = create_experiment(
                     name=dummy_hot_start_exp_name,
-                    space=self.target_task.get_search_space(),
+                    space=source_task.get_search_space(),
                     algorithms={"random": {"seed": seed}},
-                    max_trials=self.target_task.max_trials,
+                    max_trials=source_task.max_trials,
                     debug=True,
                 )
-                # Gather some random trials from the target experiment.
-                # TODO: (same as above)
-                logger.info(
-                    f"Sampling trials for the dummy 'hot-start' experiment "
-                    f"{dummy_hot_start_experiment}"
-                )
-                dummy_hot_start_experiment.workon(
-                    self.target_task, max_trials=self.target_task.max_trials
-                )
-                hot_start_kb.add_experiment(dummy_hot_start_experiment)
-                assert hot_start_kb.n_stored_experiments == 1
+                dummy_warm_start_experiments.append(dummy_warm_start_experiment)
+                warm_start_kb.add_experiment(dummy_warm_start_experiment)
+            assert warm_start_kb.n_stored_experiments == len(self.source_tasks), (
+                warm_start_kb.n_stored_experiments,
+                len(self.source_tasks),
+            )
 
-                # Create the Cold / Warm / Hot Experiments, using the corresponding
-                # knowledge bases created above.
+            # Create a 'source' experiment for the Hot-start experiment, which will
+            # contain the same number of trials as in the "warm-start" case, but all
+            # points are from the target task.
+            n_hot_start_trials = sum(task.max_trials for task in self.source_tasks)
+            dummy_hot_start_exp_name = "_".join(
+                [
+                    self.benchmark.name,
+                    self.assess_name,
+                    self.target_task_name,
+                    str(task_repetition_index),
+                    "dummy_hot",
+                ]
+            )
+            seed = (self.warm_start_seed or 0) + task_repetition_index
+            dummy_hot_start_experiment = create_experiment(
+                name=dummy_hot_start_exp_name,
+                space=self.target_task.get_search_space(),
+                algorithms={"random": {"seed": seed}},
+                max_trials=n_hot_start_trials,
+                debug=True,
+            )
+            hot_start_kb.add_experiment(dummy_hot_start_experiment)
+            assert hot_start_kb.n_stored_experiments == 1
 
+            self.dummy_warm_experiments.append(dummy_warm_start_experiments)
+            self.dummy_hot_experiments.append(dummy_hot_start_experiment)
+            # Store the knowledge bases for later.
+            # self.cold_start_kbs.append(cold_start_kb)
+            self.warm_start_kbs.append(warm_start_kb)
+            self.hot_start_kbs.append(hot_start_kb)
+
+    def _fill_knowledge_bases(self) -> None:
+        """
+        """
+
+    def _clear(self) -> None:
+        # Clear everything, for no real reason (this shouldn't really be used twice
+        # anyway).
+        self.dummy_warm_experiments.clear()
+        self.dummy_hot_experiments.clear()
+
+        self.cold_start_experiments.clear()
+        self.warm_start_experiments.clear()
+        self.hot_start_experiments.clear()
+
+        # self.cold_start_kbs.clear()
+        self.warm_start_kbs.clear()
+        self.hot_start_kbs.clear()
+
+        self.cold_start_experiments.clear()
+        self.warm_start_experiments.clear()
+        self.hot_start_experiments.clear()
+
+    def setup_experiments(self):
+        """Setup experiments to run of the study"""
+        repetitions = self.assessment.task_num
+        target_task_name = getattr(
+            self.target_task, "name", type(self.target_task).__name__
+        )
+        self._clear()
+
+        self.warm_start_kbs = [self.knowledge_base_type() for _ in range(repetitions)]
+        self.hot_start_kbs = [self.knowledge_base_type() for _ in range(repetitions)]
+
+        self._setup_source_experiments()
+
+        self.cold_start_experiments = [[] for _ in self.algorithms]
+        self.warm_start_experiments = [[] for _ in self.algorithms]
+        self.hot_start_experiments = [[] for _ in self.algorithms]
+
+        for algo_index, algorithm in enumerate(self.algorithms):
+            # Create the Cold / Warm / Hot Experiments, using the corresponding
+            # knowledge bases created above.
+            for repetition_id, warm_start_kb, hot_start_kb in zip(
+                range(repetitions), self.warm_start_kbs, self.hot_start_kbs
+            ):
                 base_experiment_name = "_".join(
                     [
                         self.benchmark.name,
                         self.assess_name,
                         target_task_name,
-                        str(task_repetition_index),
+                        str(repetition_id),
                         str(algo_index),
                     ]
                 )
-                import numpy as np
 
-                logger.info(f"Creating the cold start experiment.")
+                logger.info("Creating the cold start experiment.")
                 cold_start_experiment = create_experiment(
                     name=f"{base_experiment_name}_cold",
                     space=self.target_task.get_search_space(),
@@ -212,15 +306,13 @@ class WarmStartStudy(Study):
                     # # Huuh? Why isn't this just `algorithm`?
                     # algorithms=algorithm.experiment_algorithm,
                     max_trials=self.target_task.max_trials,
-                    # NOTE: Could also pass None here, which wouldn't use a KB, but this
-                    # could be considered more explicit, in that it prevents us from
-                    # ever deciding to create a KB with the current storage, or
-                    # something like that, which might contain trials from other
-                    # experiments, which we don't want.
+                    # TODO: Passing None here, because if we pass an empty KB, the
+                    # MultiTaskAlgo wrapper will be enabled, and there will be an unused
+                    # task-id dimension which might reduce the performance of the algo.
                     knowledge_base=None,
                     debug=self.debug,  # ? TODO: Should we set the debug flag?
                 )
-                logger.info(f"Creating the warm start experiment.")
+                logger.info("Creating the warm start experiment.")
                 warm_start_experiment = create_experiment(
                     name=f"{base_experiment_name}_warm",
                     space=self.target_task.get_search_space(),
@@ -240,14 +332,41 @@ class WarmStartStudy(Study):
                     knowledge_base=hot_start_kb,
                     debug=self.debug,
                 )
-                self.experiments_info[algo_index].append(
-                    (cold_start_experiment, warm_start_experiment, hot_start_experiment)
-                )
+
+                self.cold_start_experiments[algo_index].append(cold_start_experiment)
+                self.warm_start_experiments[algo_index].append(warm_start_experiment)
+                self.hot_start_experiments[algo_index].append(hot_start_experiment)
 
     def execute(self):
         """Execute all the experiments of the study"""
-        for _, experiments_to_run in self.experiments_info.items():
-            for cold_start_exp, warm_start_exp, hot_start_exp in experiments_to_run:
+        # Actually fill the knowledge bases, by calling `workon` on the source
+        # experiments, which are already registered in the corresponding knowledge base.
+        for warm_start_experiments in self.dummy_warm_experiments:
+            for dummy_experiment, source_task in zip(
+                warm_start_experiments, self.source_tasks
+            ):
+                logger.info(
+                    f"Sampling a maximum of {source_task.max_trials} trials for the "
+                    f"dummy 'hot-start' experiment {dummy_experiment.name}"
+                )
+                dummy_experiment.workon(source_task, max_trials=source_task.max_trials)
+
+        for dummy_experiment in self.dummy_hot_experiments:
+            # Use the same total number of points as warm-starting, but from the target
+            # task.
+            hot_start_trials = sum(task.max_trials for task in self.source_tasks)
+            logger.info(
+                f"Sampling a maximum of {hot_start_trials} trials for the dummy "
+                f"'hot-start' experiment {dummy_experiment.name}"
+            )
+            dummy_experiment.workon(self.target_task, max_trials=hot_start_trials)
+
+        # Run the main experiments:
+        for algo_index, algorithm in enumerate(self.algorithms):
+            for run_id in range(self.repetitions):
+                cold_start_exp = self.cold_start_experiments[algo_index][run_id]
+                warm_start_exp = self.warm_start_experiments[algo_index][run_id]
+                hot_start_exp = self.hot_start_experiments[algo_index][run_id]
                 # Actually run the cold / warm / hot experiments.
                 logger.info("Starting cold start experiment.")
                 cold_start_exp.workon(self.target_task, self.target_task.max_trials)
@@ -262,29 +381,75 @@ class WarmStartStudy(Study):
         """Return status of the study"""
         algorithm_tasks = {}
 
-        for _, experiment_tuples_list in self.experiments_info.items():
-            for experiment_tuple in experiment_tuples_list:
-                for experiment in experiment_tuple:
-                    trials = experiment.fetch_trials()
+        for experiment in self.experiments():
+            trials = experiment.fetch_trials()
 
-                    algorithm_name = list(experiment.configuration["algorithms"].keys())[0]
+            algorithm_name = get_algorithm_name(experiment.algorithms)
+            # TODO: Double-check that this also makes sense here:
+            task_state = algorithm_tasks.setdefault(
+                algorithm_name,
+                {
+                    "algorithm": algorithm_name,
+                    "experiments": 0,
+                    "assessment": self.assess_name,
+                    "task": self.target_task_name,
+                    "completed": 0,
+                    "trials": 0,
+                },
+            )
 
-                    task_state = algorithm_tasks.setdefault(
-                        algorithm_name,
-                        {
-                            "algorithm": algorithm_name,
-                            "experiments": 0,
-                            "assessment": self.assess_name,
-                            "task": self.task_name,
-                            "completed": 0,
-                            "trials": 0,
-                        },
-                    )
-
-                    task_state["experiments"] += 1
-                    task_state["trials"] += len(trials)
-                    if experiment.is_done:
-                        task_state["completed"] += 1
+            task_state["experiments"] += 1
+            task_state["trials"] += len(trials)
+            if experiment.is_done:
+                task_state["completed"] += 1
 
         return list(algorithm_tasks.values())
 
+    def analysis(self):
+        """Return assessment figure"""
+        assert isinstance(self.assessment, WarmStartEfficiency)
+        experiment_infos = {}
+        for i, _ in enumerate(self.algorithms):
+            tuples = list(
+                zip(
+                    self.cold_start_experiments[i],
+                    self.warm_start_experiments[i],
+                    self.hot_start_experiments[i],
+                )
+            )
+            experiment_infos[i] = tuples
+        return self.assessment.analysis(self.task_name, experiment_infos)
+
+    def __repr__(self):
+        """Represent the object as a string."""
+        algorithms_list = [
+            get_algorithm_name(algorithm) for algorithm in self.algorithms
+        ]
+
+        return (
+            f"WarmStartStudy(assessment={self.assess_name}, task={self.task_name}, "
+            f"algorithms={algorithms_list})"
+        )
+
+    def experiments(
+        self, include_source_experiments: bool = False
+    ) -> List[ExperimentClient]:
+        """Return all the experiments of the study
+        
+        When `include_source_experiments` is True, also includes the 'dummy' experiments
+        used to gather the warm-start trials.
+        """
+        exps = []
+        # TODO: Should we include the source experiments here?
+        if include_source_experiments:
+            for experiments in self.dummy_warm_experiments:
+                exps.extend(experiments)
+            for experiments in self.dummy_hot_experiments:
+                exps.extend(experiments)
+        for experiments in self.cold_start_experiments:
+            exps.extend(experiments)
+        for experiments in self.warm_start_experiments:
+            exps.extend(experiments)
+        for experiments in self.hot_start_experiments:
+            exps.extend(experiments)
+        return exps

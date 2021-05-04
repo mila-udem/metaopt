@@ -98,16 +98,19 @@ class WarmStartBenchmark(Benchmark):
                 str_target["task"] = str_tasks
             elif "source_tasks" in target:
                 source_tasks = target["source_tasks"]
-                str_tasks = dict()
-                for task in source_tasks:
-                    str_tasks.update(task.configuration)
-                str_target["source_tasks"] = str_tasks
+                task_configs = []
+                for task_or_tasks in source_tasks:
+                    if isinstance(task_or_tasks, list):
+                        task_configs.append([task.configuration for task in task_or_tasks])
+                    else:
+                        task_configs.append(task_or_tasks.configuration)
+                str_target["source_tasks"] = task_configs
 
                 target_tasks = target["target_tasks"]
-                str_tasks = dict()
+                task_configs = []
                 for task in target_tasks:
-                    str_tasks.update(task.configuration)
-                str_target["target_tasks"] = str_tasks
+                    task_configs.append(task.configuration)
+                str_target["target_tasks"] = task_configs
             else:
                 raise NotImplementedError(target)
 
@@ -118,3 +121,14 @@ class WarmStartBenchmark(Benchmark):
             config["_id"] = self.id
 
         return copy.deepcopy(config)
+
+    def analysis(self):
+        """Return all the assessment figures"""
+        figures = []
+        for study in self.studies:
+            figure = study.analysis()
+            if isinstance(figure, list):
+                figures.extend(figure)
+            else:
+                figures.append(figure)
+        return figures

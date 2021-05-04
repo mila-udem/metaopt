@@ -338,3 +338,42 @@ class MultiTaskAlgo(AlgoWrapper):
         return self.algorithm.judge(
             self.transformed_space.transform(point), measurements
         )
+
+    @staticmethod
+    def is_from_other_task(trial: Trial) -> bool:
+        return trial.params["task_id"] != 0
+
+    @property
+    def is_done(self):
+        """Return True, if an algorithm holds that there can be no further improvement.
+        By default, the cardinality of the specified search space will be used to check
+        if all possible sets of parameters has been tried.
+        """
+        return self.algorithm.is_done
+
+        # TODO:
+        trials_info_backup = self.unwrapped._trials_info.copy()
+        # self.unwrapped._trials_info
+        # TODO: Remove trials from other tasks from _trials_info temporarily
+        self.unwrapped._trials_info = {
+            k: trial
+            for k, trial in self.unwrapped._trials_info.items()
+            if not self.is_from_other_task(trial)
+        }
+        if len(trials_info_backup) != len(self.unwrapped._trials_info):
+            assert (
+                False
+            ), f"Yay! {len(trials_info_backup)} != {len(self.unwrapped._trials_info)}"
+
+        result = self.algorithm.is_done
+
+        self.unwrapped._trials_info = trials_info_backup
+        return result
+
+        # if len({k for k, v in self._trials_info.items() if from_this_task(v)) >= self.space.cardinality:
+        #     return True
+
+        # if len(self._trials_info) >= getattr(self, "max_trials", float("inf")):
+        #     return True
+
+        # return False
