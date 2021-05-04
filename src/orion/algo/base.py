@@ -218,7 +218,8 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         Parameters
         ----------
         num: int, optional
-            Number of points to suggest. Defaults to 1.
+            Number of points to suggest. Defaults to None, in which case the algorithms
+            returns the number of points it considers most optimal.
 
         Returns
         -------
