@@ -151,7 +151,7 @@ def test_with_fidelity(algorithm):
     best_trial = next(iter(sorted(trials, key=lambda trial: trial.objective.value)))
 
     assert best_trial.objective.name == "objective"
-    assert abs(best_trial.objective.value - 23.4) < 2
+    assert abs(best_trial.objective.value - 23.4) < 5
     assert len(best_trial.params) == 2
     fidelity = best_trial._params[0]
     assert fidelity.name == "noise"
@@ -186,7 +186,7 @@ def test_with_multidim(algorithm):
     best_trial = next(iter(sorted(trials, key=lambda trial: trial.objective.value)))
 
     assert best_trial.objective.name == "objective"
-    assert abs(best_trial.objective.value - 23.4) < 2
+    assert abs(best_trial.objective.value - 23.4) < 5
     assert len(best_trial.params) == 2
     fidelity = best_trial._params[0]
     assert fidelity.name == "noise"
