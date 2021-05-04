@@ -6,13 +6,13 @@ Sanitizing wrapper of main algorithm
 Performs checks and organizes required transformations of points.
 
 """
+import textwrap
 import orion.core.utils.backward as backward
-from orion.algo.base import BaseAlgorithm
 from orion.core.worker.transformer import build_required_space
+from .algo_wrapper import AlgoWrapper
 
 
-# pylint: disable=too-many-public-methods
-class PrimaryAlgo(BaseAlgorithm):
+class PrimaryAlgo(AlgoWrapper):
     """Perform checks on points and transformations. Wrap the primary algorithm.
 
     1. Checks requirements on the parameter space from algorithms and create the
@@ -35,26 +35,10 @@ class PrimaryAlgo(BaseAlgorithm):
 
         """
         self.algorithm = None
-        super(PrimaryAlgo, self).__init__(space, algorithm=algorithm_config)
+        super().__init__(space, algorithm=algorithm_config)
         requirements = backward.get_algo_requirements(self.algorithm)
         self.transformed_space = build_required_space(self.space, **requirements)
         self.algorithm.space = self.transformed_space
-
-    def seed_rng(self, seed):
-        """Seed the state of the algorithm's random number generator."""
-        self.algorithm.seed_rng(seed)
-
-    @property
-    def state_dict(self):
-        """Return a state dict that can be used to reset the state of the algorithm."""
-        return self.algorithm.state_dict
-
-    def set_state(self, state_dict):
-        """Reset the state of the algorithm based on the given state_dict
-
-        :param state_dict: Dictionary representing state of an algorithm
-        """
-        self.algorithm.set_state(state_dict)
 
     def suggest(self, num=1):
         """Suggest a `num` of new sets of parameters.
@@ -72,11 +56,12 @@ class PrimaryAlgo(BaseAlgorithm):
         for point in points:
             if point not in self.transformed_space:
                 raise ValueError(
-                    """
-Point is not contained in space:
-Point: {}
-Space: {}""".format(
-                        point, self.transformed_space
+                    textwrap.dedent(
+                        f"""\
+                        Point is not contained in space:
+                        Point: {point}
+                        Space: {self.transformed_space}
+                        """
                     )
                 )
 
@@ -94,11 +79,6 @@ Space: {}""".format(
             assert point in self.space
             tpoints.append(self.transformed_space.transform(point))
         self.algorithm.observe(tpoints, results)
-
-    @property
-    def is_done(self):
-        """Return True, if an algorithm holds that there can be no further improvement."""
-        return self.algorithm.is_done
 
     def score(self, point):
         """Allow algorithm to evaluate `point` based on a prediction about
@@ -121,22 +101,6 @@ Space: {}""".format(
         return self.algorithm.judge(
             self.transformed_space.transform(point), measurements
         )
-
-    @property
-    def should_suspend(self):
-        """Allow algorithm to decide whether a particular running trial is still
-        worth to complete its evaluation, based on information provided by the
-        `judge` method.
-
-        """
-        return self.algorithm.should_suspend
-
-    @property
-    def configuration(self):
-        """Return tunable elements of this algorithm in a dictionary form
-        appropriate for saving.
-        """
-        return self.algorithm.configuration
 
     @property
     def space(self):

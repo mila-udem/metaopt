@@ -109,7 +109,7 @@ log = logging.getLogger(__name__)
 ##
 
 
-def build(name, version=None, branching=None, **config):
+def build(name, version=None, branching=None, knowledge_base=None, **config):
     """Build an experiment object
 
     If new, ``space`` argument must be provided, else all arguments are fetched from the database
@@ -181,7 +181,10 @@ def build(name, version=None, branching=None, **config):
     if len(config["space"]) == 0:
         raise NoConfigurationError("No prior found. Please include at least one.")
 
-    experiment = create_experiment(mode="x", **copy.deepcopy(config))
+    experiment = create_experiment(
+        mode="x", knowledge_base=knowledge_base, **copy.deepcopy(config),
+    )
+
     if experiment.id is None:
         log.debug("Experiment not found in DB. Now attempting registration in DB.")
         try:
@@ -389,7 +392,8 @@ def create_experiment(name, version, mode, space, **kwargs):
         Number of broken trials for the experiment to be considered broken.
     storage: dict, optional
         Configuration of the storage backend.
-
+    knowledge_base: AbstractKnowledgeBase, optional
+        Knowledge base, or Knowledge base configuration.
     """
     experiment = Experiment(name=name, version=version, mode=mode)
     experiment._id = kwargs.get("_id", None)  # pylint:disable=protected-access
@@ -404,12 +408,14 @@ def create_experiment(name, version, mode, space, **kwargs):
     experiment.max_broken = kwargs.get(
         "max_broken", orion.core.config.experiment.max_broken
     )
+    knowledge_base = kwargs.get("knowledge_base")
     experiment.space = _instantiate_space(space)
     experiment.algorithms = _instantiate_algo(
         experiment.space,
         experiment.max_trials,
         kwargs.get("algorithms"),
         ignore_unavailable=mode != "x",
+        knowledge_base=knowledge_base,
     )
     experiment.producer = kwargs.get("producer", {})
     experiment.producer["strategy"] = _instantiate_strategy(
@@ -504,7 +510,9 @@ def _instantiate_space(config):
     return SpaceBuilder().build(config)
 
 
-def _instantiate_algo(space, max_trials, config=None, ignore_unavailable=False):
+def _instantiate_algo(
+    space, max_trials, config=None, ignore_unavailable=False, knowledge_base=None
+):
     """Instantiate the algorithm object
 
     Parameters
@@ -521,8 +529,17 @@ def _instantiate_algo(space, max_trials, config=None, ignore_unavailable=False):
         config = orion.core.config.experiment.algorithms
 
     try:
-        algo = PrimaryAlgo(space, config)
-        algo.algorithm.max_trials = max_trials
+        if knowledge_base is not None:
+            from orion.core.worker.multi_task_algo import MultiTaskAlgo
+            algo = MultiTaskAlgo(
+                space=space, algorithm_config=config, knowledge_base=knowledge_base
+            )
+        else:
+            algo = PrimaryAlgo(space, config)
+        algo.unwrapped.max_trials = max_trials
+        # from orion.core.worker.multi_task_algo import MultiTaskAlgo
+        # algo = MultiTaskAlgo(space, config)
+        # algo.unwrapped.max_trials = max_trials
     except NotImplementedError as e:
         if not ignore_unavailable:
             raise e

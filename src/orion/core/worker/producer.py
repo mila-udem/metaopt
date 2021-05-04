@@ -6,6 +6,7 @@ Produce and register samples to try
 Suggest new parameter sets which optimize the objective.
 
 """
+from typing import Optional, List, Dict, Mapping
 import copy
 import logging
 import random
@@ -17,6 +18,7 @@ from orion.core.utils import format_trials
 from orion.core.utils.exceptions import SampleTimeout, WaitingForTrials
 from orion.core.worker.trial import Trial
 from orion.core.worker.trials_history import TrialsHistory
+# from orion.core.worker.knowledge_base import AbstractKnowledgeBase
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +32,9 @@ class Producer(object):
 
     """
 
-    def __init__(self, experiment, max_idle_time=None):
+    def __init__(
+        self, experiment, max_idle_time=None, knowledge_base: "KnowledgeBase" = None
+    ):
         """Initialize a producer.
 
         :param experiment: Manager of this experiment, provides convenient
@@ -56,6 +60,11 @@ class Producer(object):
         self.params_hashes = set()
         self.naive_trials_history = None
         self.failure_count = 0
+
+        from orion.core.worker.knowledge_base import AbstractKnowledgeBase
+        self.knowledge_base: Optional[AbstractKnowledgeBase] = knowledge_base
+        # Indicates wether the algo has been warm-started with the knowledge base.
+        self.warm_started = False
 
     @property
     def pool_size(self):
@@ -161,6 +170,28 @@ class Producer(object):
         ones.
         """
         trials = self.experiment.fetch_trials(with_evc_tree=True)
+
+        if self.knowledge_base and not self.warm_started:
+            # TODO: Dont use the KB when we have enough points in the target task.
+            ## Option 1:
+            # Get the trials from other 'similar' experiments.
+            related_trials: Dict[
+                Mapping, List[Trial]
+            ] = self.knowledge_base.get_related_trials(self.experiment)
+            if related_trials:
+                log.debug("### Warm starting")
+                self.algorithm.warm_start(related_trials)
+                self.warm_started = True
+            # ## Option 2:
+
+            # from orion.client import ExperimentClient
+            # closest_experiment_clients: List[ExperimentClient] = self.knowledge_base.get_closest_experiment_clients(self.experiment)
+
+            # print("Closest experiment clients: ")
+            # for experiment_client in closest_experiment_clients:
+            #     print(f"exp client: {experiment_client}")
+            #     warm_start_trials: List[Trial] = experiment_client.fetch_trials()
+            #     print(f"Found {len(warm_start_trials)} trials.")
 
         self._update_algorithm(
             [trial for trial in trials if trial.status == "completed"]
