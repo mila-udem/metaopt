@@ -337,7 +337,7 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         if self.n_suggested >= self.space.cardinality:
             return True
 
-        if self.n_suggested >= getattr(self, "max_trials", float("inf")):
+        if self.n_observed >= getattr(self, "max_trials", float("inf")):
             return True
 
         return False
