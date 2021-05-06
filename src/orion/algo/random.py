@@ -56,10 +56,10 @@ class Random(BaseAlgorithm):
            `orion.algo.space.Space`.
         """
         if num is None:
-            num = 1
+            num = max(self.max_trials - self.n_suggested, 1)
 
         points = []
-        while len(points) < num:
+        while len(points) < num and not self.is_done:
             seed = tuple(self.rng.randint(0, 1000000, size=3))
             new_point = self.space.sample(1, seed=seed)[0]
             if not self.has_suggested(new_point):

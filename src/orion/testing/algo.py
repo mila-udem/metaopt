@@ -113,6 +113,7 @@ class BaseAlgoTests:
 
     algo_name = None
     config = {}
+    max_trials = 200
     space = {"x": "uniform(0, 1)", "y": "uniform(0, 1)"}
 
     @classmethod
@@ -155,10 +156,12 @@ class BaseAlgoTests:
         """
         config = copy.deepcopy(config or self.config)
         config.update(kwargs)
-        return PrimaryAlgo(
+        algo = PrimaryAlgo(
             space or self.create_space(),
             {self.algo_name: config},
         )
+        algo.algorithm.max_trials = self.max_trials
+        return algo
 
     def update_space(self, test_space):
         """Get complete space configuration with partial overwrite
@@ -584,11 +587,8 @@ class BaseAlgoTests:
 
     def test_is_done_max_trials(self):
         """Test that algorithm will stop when max trials is reached"""
-        MAX_TRIALS = 10
         algo = self.create_algo()
-        algo.algorithm.max_trials = MAX_TRIALS
-
-        self.force_observe(MAX_TRIALS, algo)
+        self.force_observe(self.max_trials, algo)
 
         assert algo.is_done
 
