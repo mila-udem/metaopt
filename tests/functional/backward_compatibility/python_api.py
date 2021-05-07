@@ -4,7 +4,10 @@
 from orion.client import create_experiment
 
 create_experiment(
-    "hunt-python", space={"x": "uniform(-50,50)"}, algorithms={"random": {"seed": 1}}
+    "hunt-python",
+    space={"x": "uniform(-50,50)"},
+    algorithms={"random": {"seed": 1}},
+    max_trials=10,
 )
 
 create_experiment(
