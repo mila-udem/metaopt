@@ -7,10 +7,12 @@ Formulation of a general search algorithm with respect to some objective.
 Algorithm implementations must inherit from `orion.algo.base.OptimizationAlgorithm`.
 
 """
+import copy
 import hashlib
 import logging
 from abc import ABCMeta, abstractmethod
 
+from orion.algo.space import Fidelity
 from orion.core.utils import Factory
 
 log = logging.getLogger(__name__)
@@ -136,7 +138,7 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
     @property
     def state_dict(self):
         """Return a state dict that can be used to reset the state of the algorithm."""
-        return {"_trials_info": self._trials_info}
+        return {"_trials_info": copy.deepcopy(self._trials_info)}
 
     def set_state(self, state_dict):
         """Reset the state of the algorithm based on the given state_dict
@@ -145,14 +147,79 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         """
         self._trials_info = state_dict.get("_trials_info")
 
+    def format_point(self, point):
+        """Format point based on space transformations
+
+        This will apply the reverse transformation on the point and then
+        transform it again.
+
+        Some transformations are lossy and thus the points suggested by the algorithm could
+        be different when returned to `observe`. Using `format_point` makes it possible
+        for the algorithm to see the final version of the point after back and forth
+        transformations. This way it can recognise the point in `observe` and also
+        avoid duplicates that would have gone unnoticed during suggestion.
+
+        Parameters
+        ----------
+        point : tuples of array-likes
+            Points from a `orion.algo.space.Space`.
+        """
+
+        point = tuple(point)
+        if hasattr(self.space, "transform"):
+            point = self.space.transform(self.space.reverse(point))
+
+        return point
+
+    def get_id(self, point, ignore_fidelity=False):
+        """Compute a unique hash for a point based on params
+
+        Parameters
+        ----------
+        point : tuples of array-likes
+            Points from a `orion.algo.space.Space`.
+        ignore_fidelity: bool, optional
+            If True, the fidelity dimension is ignored when computing a unique hash for
+            the trial. Defaults to False.
+        """
+        # Apply transforms and reverse to see data as it would come from DB
+        # (Some transformations looses some info. ex: Precision transformation)
+        point = list(self.format_point(point))
+
+        if ignore_fidelity:
+            non_fidelity_dims = point[0 : self.fidelity_index]
+            non_fidelity_dims.extend(point[self.fidelity_index + 1 :])
+            point = non_fidelity_dims
+
+        return hashlib.md5(str(point).encode("utf-8")).hexdigest()
+
+    @property
+    def fidelity_index(self):
+        """Compute the index of the point where fidelity is.
+
+        Returns None if there is no fidelity dimension.
+        """
+
+        def _is_fidelity(dim):
+            return dim.type == "fidelity"
+
+        fidelity_index = [
+            i for i, dim in enumerate(self.space.values()) if _is_fidelity(dim)
+        ]
+        if fidelity_index:
+            return fidelity_index[0]
+
+        return None
+
     @abstractmethod
-    def suggest(self, num=1):
+    def suggest(self, num):
         """Suggest a `num` of new sets of parameters.
 
         Parameters
         ----------
-        num: int, optional
-            Number of points to suggest. Defaults to 1.
+        num: int
+            Number of points to suggest. The algorithm may return less than the number of points
+            requested.
 
         Returns
         -------
@@ -176,7 +243,6 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         ----------
         points : list of tuples of array-likes
            Points from a `orion.algo.space.Space`.
-           Evaluated problem parameters by a consumer.
         results : list of dicts
            Contains the result of an evaluation; partial information about the
            black-box function at each point in `params`.
@@ -194,21 +260,84 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
 
         """
         for point, result in zip(points, results):
-            point_id = infer_trial_id(point)
+            if not self.has_observed(point):
+                self.register(point, result)
 
-            if point_id not in self._trials_info:
-                self._trials_info[point_id] = (point, result)
+    def register(self, point, result=None):
+        """Save the point as one suggested or observed by the algorithm
+
+        Parameters
+        ----------
+        point : array-likes
+           Point from a `orion.algo.space.Space`.
+        result : dict or None, optional
+           The result of an evaluation; partial information about the
+           black-box function at each point in `params`.
+           None is suggested and not yet completed.
+
+        """
+        self._trials_info[self.get_id(point)] = (point, result)
+
+    @property
+    def n_suggested(self):
+        """Number of trials suggested by the algorithm"""
+        return len(self._trials_info)
+
+    @property
+    def n_observed(self):
+        """Number of completed trials observed by the algorithm"""
+        return sum(bool(point[1] is not None) for point in self._trials_info.values())
+
+    def has_suggested(self, point):
+        """Whether the algorithm has suggested a given point.
+
+        Parameters
+        ----------
+        point : tuples of array-likes
+           Points from a `orion.algo.space.Space`.
+
+        Returns
+        -------
+        bool
+            True if the point was suggested by the algo, False otherwise.
+
+        """
+        return self.get_id(point) in self._trials_info
+
+    def has_observed(self, point):
+        """Whether the algorithm has observed a given point objective.
+
+        This only counts observed completed trials.
+
+        Parameters
+        ----------
+        point : tuples of array-likes
+            Points from a `orion.algo.space.Space`.
+
+        Returns
+        -------
+        bool
+            True if the point's objective was observed by the algo, False otherwise.
+
+        """
+
+        trial_id = self.get_id(point)
+        return (
+            trial_id in self._trials_info and self._trials_info[trial_id][1] is not None
+        )
 
     @property
     def is_done(self):
-        """Return True, if an algorithm holds that there can be no further improvement.
+        """Whether the algorithm is done and will not make further suggestions.
+
+        Return True, if an algorithm holds that there can be no further improvement.
         By default, the cardinality of the specified search space will be used to check
         if all possible sets of parameters has been tried.
         """
-        if len(self._trials_info) >= self.space.cardinality:
+        if self.n_suggested >= self.space.cardinality:
             return True
 
-        if len(self._trials_info) >= getattr(self, "max_trials", float("inf")):
+        if self.n_observed >= getattr(self, "max_trials", float("inf")):
             return True
 
         return False

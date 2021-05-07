@@ -66,5 +66,6 @@
    code/core
    code/plotting
    code/storage
+   code/testing
 
 .. Don't fetch reference/viz

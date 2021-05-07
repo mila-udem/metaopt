@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """Tests for :mod:`orion.algo.hyperband`."""
+import copy
 import hashlib
 import logging
 
 import numpy as np
 import pytest
 
-from orion.algo.hyperband import Bracket, Hyperband, compute_budgets
+from orion.algo.hyperband import Hyperband, HyperbandBracket, compute_budgets
 from orion.algo.space import Fidelity, Integer, Real, Space
+from orion.testing.algo import BaseAlgoTests, phase
 
 
 @pytest.fixture
@@ -34,8 +36,8 @@ def hyperband(space):
 
 @pytest.fixture
 def bracket(budgets, hyperband):
-    """Return a `Bracket` instance configured with `b_config`."""
-    return Bracket(hyperband, budgets, 1)
+    """Return a `HyperbandBracket` instance configured with `b_config`."""
+    return HyperbandBracket(hyperband, budgets, 1)
 
 
 @pytest.fixture
@@ -103,12 +105,24 @@ def test_compute_budgets():
 
 
 def force_observe(hyperband, point, results):
-    hyperband.sampled.add(hashlib.md5(str(list(point)).encode("utf-8")).hexdigest())
+    # hyperband.sampled.add(hashlib.md5(str(list(point)).encode("utf-8")).hexdigest())
+
+    hyperband.register(point, results)
+
+    bracket = hyperband._get_bracket(point)
+    id_wo_fidelity = hyperband.get_id(point, ignore_fidelity=True)
+    hyperband.trial_to_brackets[id_wo_fidelity] = bracket
+
     hyperband.observe([point], [results])
 
 
-class TestBracket:
-    """Tests for the `Bracket` class."""
+def mock_samples(hyperband, samples):
+    for bracket in hyperband.brackets:
+        bracket._samples = samples
+
+
+class TestHyperbandBracket:
+    """Tests for the `HyperbandBracket` class."""
 
     def test_rungs_creation(self, bracket):
         """Test the creation of rungs for bracket 0."""
@@ -198,7 +212,7 @@ class TestBracket:
         bracket.rungs[1] = rung_1
         point_hash = hashlib.md5(str([0.0]).encode("utf-8")).hexdigest()
 
-        candidates = bracket.promote()
+        candidates = bracket.promote(1)
 
         assert point_hash in bracket.rungs[1]["results"]
         assert bracket.rungs[1]["results"][point_hash] == (0.0, (3, 0.0))
@@ -208,9 +222,9 @@ class TestBracket:
         """Check if no candidate is returned by update_rungs."""
         bracket.hyperband = hyperband
 
-        candidate = bracket.promote()
+        candidates = bracket.promote(1)
 
-        assert candidate is None
+        assert candidates == []
 
     def test_get_point_max_resource(self, hyperband, bracket, rung_0, rung_1, rung_2):
         """Test to get the max resource R for a particular point"""
@@ -229,12 +243,12 @@ class TestBracket:
         assert bracket.get_point_max_resource(point=(1, 8.0)) == 1
 
     def test_repr(self, bracket, rung_0, rung_1, rung_2):
-        """Test the string representation of Bracket"""
+        """Test the string representation of HyperbandBracket"""
         bracket.rungs[0] = rung_0
         bracket.rungs[1] = rung_1
         bracket.rungs[2] = rung_2
 
-        assert str(bracket) == "Bracket(resource=[1, 3, 9], repetition id=1)"
+        assert str(bracket) == "HyperbandBracket(resource=[1, 3, 9], repetition id=1)"
 
 
 class TestHyperband:
@@ -357,63 +371,14 @@ class TestHyperband:
         force_observe(hyperband, point, {"objective": 0.0})
         assert "Point registered to wrong bracket" in caplog.text
 
-    def test_get_id(self, space):
-        """Test valid id of points"""
-        hyperband = Hyperband(space)
-
-        assert hyperband.get_id(["whatever", 1]) == hyperband.get_id(["is here", 1])
-        assert hyperband.get_id(["whatever", 1]) != hyperband.get_id(["is here", 2])
-        assert hyperband.get_id(
-            ["whatever", 1], ignore_fidelity=False
-        ) != hyperband.get_id(["is here", 1], ignore_fidelity=False)
-        assert hyperband.get_id(
-            ["whatever", 1], ignore_fidelity=False
-        ) != hyperband.get_id(["is here", 2], ignore_fidelity=False)
-        assert hyperband.get_id(["same", 1], ignore_fidelity=False) == hyperband.get_id(
-            ["same", 1], ignore_fidelity=False
-        )
-        assert hyperband.get_id(["same", 1], ignore_fidelity=False) != hyperband.get_id(
-            ["same", 1]
-        )
-
-    def test_get_id_multidim(self):
-        """Test valid id for points with dim of shape > 1"""
-        space = Space()
-        space.register(Fidelity("epoch", 1, 9, 3))
-        space.register(Real("lr", "uniform", 0, 1, shape=2))
-
-        hyperband = Hyperband(space)
-
-        assert hyperband.get_id(["whatever", [1, 1]]) == hyperband.get_id(
-            ["is here", [1, 1]]
-        )
-        assert hyperband.get_id(["whatever", [1, 1]]) != hyperband.get_id(
-            ["is here", [2, 2]]
-        )
-        assert hyperband.get_id(
-            ["whatever", [1, 1]], ignore_fidelity=False
-        ) != hyperband.get_id(["is here", [1, 1]], ignore_fidelity=False)
-        assert hyperband.get_id(
-            ["whatever", [1, 1]], ignore_fidelity=False
-        ) != hyperband.get_id(["is here", [2, 2]], ignore_fidelity=False)
-        assert hyperband.get_id(
-            ["same", [1, 1]], ignore_fidelity=False
-        ) == hyperband.get_id(["same", [1, 1]], ignore_fidelity=False)
-        assert hyperband.get_id(
-            ["same", [1, 1]], ignore_fidelity=False
-        ) != hyperband.get_id(["same", [1, 1]])
-
     def test_suggest_new(self, monkeypatch, hyperband, bracket, rung_0, rung_1, rung_2):
         """Test that a new point is sampled."""
         hyperband.brackets = [bracket]
         bracket.hyperband = hyperband
 
-        def sample(num=1, seed=None):
-            return [("fidelity", i) for i in range(num)]
+        mock_samples(hyperband, [("fidelity", i) for i in range(10)])
 
-        monkeypatch.setattr(hyperband.space, "sample", sample)
-
-        points = hyperband.suggest()
+        points = hyperband.suggest(100)
 
         assert points[0] == (1.0, 0)
         assert points[1] == (1.0, 1)
@@ -431,16 +396,15 @@ class TestHyperband:
         duplicate_id = hashlib.md5(str([duplicate_point]).encode("utf-8")).hexdigest()
         bracket.rungs[0]["results"] = {duplicate_id: (0.0, duplicate_point)}
 
-        hyperband.trial_info_wo_fidelity[hyperband.get_id(duplicate_point)] = bracket
+        hyperband.trial_to_brackets[
+            hyperband.get_id(duplicate_point, ignore_fidelity=True)
+        ] = bracket
 
         points = [duplicate_point, new_point]
 
-        def sample(num=1, seed=None):
-            return points + [("fidelity", i) for i in range(num - 2)]
+        mock_samples(hyperband, points + [("fidelity", i) for i in range(10 - 2)])
 
-        monkeypatch.setattr(hyperband.space, "sample", sample)
-
-        assert hyperband.suggest()[0][1] == new_point[1]
+        assert hyperband.suggest(100)[0][1] == new_point[1]
 
     def test_suggest_duplicates_one_call(self, monkeypatch, hyperband, bracket):
         """Test that same points are not allowed in the same suggest call ofxs
@@ -451,20 +415,32 @@ class TestHyperband:
 
         zhe_point = [(1, 0.0), (1, 1.0), (1, 1.0), (1, 2.0)]
 
-        def sample(num=1, seed=None):
-            return zhe_point * num
-
-        monkeypatch.setattr(hyperband.space, "sample", sample)
-        zhe_samples = hyperband.suggest()
+        mock_samples(hyperband, zhe_point * 2)
+        zhe_samples = hyperband.suggest(100)
 
         assert zhe_samples[0][1] == 0.0
         assert zhe_samples[1][1] == 1.0
         assert zhe_samples[2][1] == 2.0
 
-        zhe_point = [(3, 0.0), (3, 1.0), (3, 5.0), (3, 4.0)]
-        hyperband.trial_info_wo_fidelity[hyperband.get_id((1, 0.0))] = bracket
-        hyperband.trial_info_wo_fidelity[hyperband.get_id((1, 1.0))] = bracket
-        zhe_samples = hyperband.suggest()
+        # zhe_point =
+        mock_samples(
+            hyperband,
+            [
+                (3, 0.0),
+                (3, 1.0),
+                (3, 1.0),
+                (3, 2.0),
+                (3, 5.0),
+                (3, 4.0),
+            ],
+        )
+        hyperband.trial_to_brackets[
+            hyperband.get_id((1, 0.0), ignore_fidelity=True)
+        ] = bracket
+        hyperband.trial_to_brackets[
+            hyperband.get_id((1, 1.0), ignore_fidelity=True)
+        ] = bracket
+        zhe_samples = hyperband.suggest(100)
         assert zhe_samples[0][1] == 5.0
         assert zhe_samples[1][1] == 4.0
 
@@ -473,7 +449,7 @@ class TestHyperband:
     ):
         """Test that sampling collisions are handled between different hyperband execution."""
         hyperband.repetitions = 2
-        bracket = Bracket(hyperband, budgets, 1)
+        bracket = HyperbandBracket(hyperband, budgets, 1)
         hyperband.brackets = [bracket]
         bracket.hyperband = hyperband
 
@@ -489,11 +465,9 @@ class TestHyperband:
 
         zhe_point = [(9, 0), (9, 1), (9, 2)]
 
-        def sample(num=1, seed=None):
-            return zhe_point * num
-
-        monkeypatch.setattr(hyperband.space, "sample", sample)
-        zhe_samples = hyperband.suggest()
+        hyperband._refresh_brackets()
+        mock_samples(hyperband, zhe_point * 2)
+        zhe_samples = hyperband.suggest(100)
         assert zhe_samples == [(9, 1), (9, 2)]
 
     def test_suggest_inf_duplicates(
@@ -504,14 +478,13 @@ class TestHyperband:
         bracket.hyperband = hyperband
 
         zhe_point = ("fidelity", 0.0)
-        hyperband.trial_info_wo_fidelity[hyperband.get_id(zhe_point)] = bracket
+        hyperband.trial_to_brackets[
+            hyperband.get_id(zhe_point, ignore_fidelity=True)
+        ] = bracket
 
-        def sample(num=1, seed=None):
-            return [zhe_point] * num
+        mock_samples(hyperband, [zhe_point] * 2)
 
-        monkeypatch.setattr(hyperband.space, "sample", sample)
-
-        assert hyperband.suggest() is None
+        assert hyperband.suggest(100) == []
 
     def test_suggest_in_finite_cardinality(self):
         """Test that suggest None when search space is empty"""
@@ -523,7 +496,7 @@ class TestHyperband:
         for i in range(6):
             force_observe(hyperband, (1, i), {"objective": i})
 
-        assert hyperband.suggest() is None
+        assert hyperband.suggest(100) == []
 
     def test_suggest_promote(self, hyperband, bracket, rung_0):
         """Test that correct point is promoted and returned."""
@@ -531,7 +504,7 @@ class TestHyperband:
         bracket.hyperband = hyperband
         bracket.rungs[0] = rung_0
 
-        points = hyperband.suggest()
+        points = hyperband.suggest(100)
 
         assert points == [(3, i) for i in range(3)]
 
@@ -660,64 +633,29 @@ class TestHyperband:
         objective, point = rung_0["results"][trial_id]
         rung_0["results"][trial_id] = (None, point)
 
-        points = hyperband.suggest()
-
-        assert points is None
-
-    def test_seed_rng(self, hyperband):
-        """Test that algo is seeded properly"""
-        hyperband.seed_rng(1)
-        a = hyperband.suggest(1)
-        # Hyperband will always return the full first rung
-        assert np.allclose(a, hyperband.suggest(1))
-
-        hyperband.seed_rng(2)
-        assert not np.allclose(a, hyperband.suggest(1))
-
-    def test_set_state(self, hyperband):
-        """Test that state is reset properly"""
-        hyperband.seed_rng(1)
-        state = hyperband.state_dict
-        points = hyperband.suggest(1)
-        # Hyperband will always return the full first rung
-        assert np.allclose(points, hyperband.suggest(1))
-
-        hyperband.seed_rng(2)
-        assert not np.allclose(points, hyperband.suggest(1))
-
-        hyperband.set_state(state)
-        assert np.allclose(points, hyperband.suggest(1))
+        assert hyperband.suggest(100) == []
 
     def test_full_process(self, monkeypatch, hyperband):
         """Test Hyperband full process."""
-        points = [("fidelity", i) for i in range(4000)]
+        sample_points = [("fidelity", i) for i in range(100)]
 
-        def sample(num=1, seed=None):
-            return points[:num]
-
-        monkeypatch.setattr(hyperband.space, "sample", sample)
+        hyperband._refresh_brackets()
+        mock_samples(hyperband, copy.deepcopy(sample_points))
 
         # Fill all brackets' first rung
 
-        for i in range(3):
-            point = hyperband.suggest()[0]
-            assert point == (9, i)
-            hyperband.observe([point], [{"objective": None}])
+        points = hyperband.suggest(100)
+        from orion.algo.hyperband import tabulate_status
 
-        for i in range(3):
-            point = hyperband.suggest()[0]
-            assert point == (3, i + 3)
-            hyperband.observe([point], [{"objective": None}])
-
-        for i in range(9):
-            point = hyperband.suggest()[0]
-            assert point == (1, i + 3 + 3)
-            hyperband.observe([point], [{"objective": None}])
+        print(tabulate_status(hyperband.brackets))
+        assert points[:3] == [(9, i) for i in range(3)]
+        assert points[3:6] == [(3, i) for i in range(3, 6)]
+        assert points[6:] == [(1, i) for i in range(6, 15)]
 
         assert hyperband.brackets[0].has_rung_filled(0)
         assert not hyperband.brackets[0].is_ready()
-        assert hyperband.suggest() is None
-        assert hyperband.suggest() is None
+        assert hyperband.suggest(100) == []
+        assert hyperband.suggest(100) == []
 
         # Observe first bracket first rung
 
@@ -729,11 +667,8 @@ class TestHyperband:
         assert not hyperband.brackets[2].is_ready()
 
         # Promote first bracket first rung
-
-        for i in range(3):
-            point = hyperband.suggest()[0]
-            assert point == (3, 3 + 3 + 9 - 1 - i)
-            hyperband.observe([point], [{"objective": None}])
+        points = hyperband.suggest(100)
+        assert points == [(3, 3 + 3 + 9 - 1 - i) for i in range(3)]
 
         assert hyperband.brackets[0].has_rung_filled(1)
         assert not hyperband.brackets[0].is_ready()
@@ -741,7 +676,6 @@ class TestHyperband:
         assert not hyperband.brackets[2].is_ready()
 
         # Observe first bracket second rung
-
         for i in range(3):
             hyperband.observe([(3, 3 + 3 + 9 - 1 - i)], [{"objective": 8 - i}])
 
@@ -749,29 +683,33 @@ class TestHyperband:
         assert not hyperband.brackets[1].is_ready()
         assert not hyperband.brackets[2].is_ready()
 
-        # Observe second bracket first rung
+        # Promote first bracket second rung
+        points = hyperband.suggest(100)
+        assert points == [(9, 12)]
 
+        assert hyperband.brackets[0].has_rung_filled(2)
+        assert not hyperband.brackets[0].is_ready()
+        assert not hyperband.brackets[1].is_ready()
+        assert not hyperband.brackets[2].is_ready()
+
+        # Observe second bracket first rung
         for i in range(3):
             hyperband.observe([(3, i + 3)], [{"objective": 8 - i}])
 
-        assert hyperband.brackets[0].is_ready()
+        assert not hyperband.brackets[0].is_ready()
         assert hyperband.brackets[1].is_ready()
         assert not hyperband.brackets[2].is_ready()
 
         # Promote second bracket first rung
+        points = hyperband.suggest(100)
+        assert points == [(9, 5)]
 
-        for i in range(1):
-            point = hyperband.suggest()[0]
-            assert point == (9, 3 + 3 - 1 - i)
-            hyperband.observe([point], [{"objective": None}])
-
-        assert hyperband.brackets[0].is_ready()
+        assert not hyperband.brackets[0].is_ready()
         assert hyperband.brackets[1].has_rung_filled(1)
         assert not hyperband.brackets[1].is_ready()
         assert not hyperband.brackets[2].is_ready()
 
         # Observe third bracket first rung
-
         for i in range(3):
             hyperband.observe([(9, i)], [{"objective": 3 - i}])
 
@@ -781,7 +719,6 @@ class TestHyperband:
         assert hyperband.brackets[2].is_done
 
         # Observe second bracket second rung
-
         for i in range(1):
             hyperband.observe([(9, 3 + 3 - 1 - i)], [{"objective": 5 - i}])
 
@@ -790,22 +727,151 @@ class TestHyperband:
         assert hyperband.brackets[1].is_done
 
         # Observe first bracket third rung
-
-        for i in range(1):
-            point = hyperband.suggest()[0]
-            assert point == (9, 3 + 3 + 9 - 1 - 2 + i)
-            hyperband.observe([point], [{"objective": 3 - i}])
+        hyperband.observe(points, [{"objective": 3 - i}])
 
         assert hyperband.is_done
-        assert hyperband.brackets[0].is_ready(2)
         assert hyperband.brackets[0].is_done
-        assert hyperband.suggest() is None
+        assert hyperband.suggest(100) == []
 
         # Refresh repeat and execution times property
         monkeypatch.setattr(hyperband, "repetitions", 2)
-        monkeypatch.setattr(hyperband, "executed_times", 0)
-        hyperband.observe([(9, 12)], [{"objective": 3 - i}])
+        # monkeypatch.setattr(hyperband.brackets[0], "repetition_id", 0)
+        # hyperband.observe([(9, 12)], [{"objective": 3 - i}])
+        hyperband._refresh_brackets()
+        mock_samples(hyperband, copy.deepcopy(sample_points))
+        points = hyperband.suggest(100)
         assert not hyperband.is_done
         assert not hyperband.brackets[0].is_ready(2)
         assert not hyperband.brackets[0].is_done
-        assert hyperband.suggest()[0] == (9, 3)
+        assert points[:3] == [(9, 3), (9, 4), (9, 6)]
+        assert points[3:6] == [(3, 7), (3, 8), (3, 9)]
+        assert points[6:] == [(1, i) for i in range(15, 24)]
+
+
+class TestGenericHyperband(BaseAlgoTests):
+    algo_name = "hyperband"
+    config = {
+        "seed": 123456,
+        "repetitions": 3,
+    }
+    space = {"x": "uniform(0, 1)", "f": "fidelity(1, 10, base=2)"}
+
+    @phase
+    def test_suggest_lots(self, mocker, num, attr):
+        """Test that hyperband returns whole rungs when requesting large `num`"""
+        algo = self.create_algo()
+        spy = self.spy_phase(mocker, num, algo, attr)
+        points = algo.suggest(10000)
+        repetition_id, rung_id = self.infer_repetition_and_rung(num)
+        assert len(points) == BUDGETS[rung_id + 1 if rung_id < 3 else 0]
+
+    def test_suggest_n(self, mocker, num, attr):
+        algo = self.create_algo()
+        spy = self.spy_phase(mocker, num, algo, attr)
+        points = algo.suggest(5)
+        repetition_id, rung_id = self.infer_repetition_and_rung(num)
+        assert len(points) == min(BUDGETS[rung_id + 1 if rung_id < 3 else 0], 5)
+
+    @pytest.mark.skip(reason="See https://github.com/Epistimio/orion/issues/598")
+    def test_is_done_cardinality(self):
+        space = self.update_space(
+            {
+                # Increase fidelity to increase number of trials in first rungs
+                "f": "fidelity(1, 100, base=2)",
+                "x": "uniform(0, 4, discrete=True)",
+                "y": "choices(['a', 'b', 'c'])",
+                "z": "loguniform(1, 6, discrete=True)",
+            }
+        )
+        space = self.create_space(space)
+        assert space.cardinality == 5 * 3 * 6
+
+        algo = self.create_algo(space=space)
+
+        for rung in range(len(algo.algorithm.brackets[0].rungs)):
+            assert not algo.is_done
+
+            points = []
+            assert not algo.is_done
+            n_sampled = algo.n_suggested
+            n_trials = len(algo.algorithm.trial_to_brackets)
+            new_points = algo.suggest(100)
+            if not new_points:
+                break
+            points += new_points
+            assert algo.n_suggested == n_sampled + len(new_points)
+            assert len(algo.algorithm.trial_to_brackets) == space.cardinality
+
+            # We reached max number of trials we can suggest before observing any.
+            assert algo.suggest(100) == []
+
+            assert not algo.is_done
+
+            for i, point in enumerate(points):
+                algo.observe([point], [dict(objective=i)])
+
+        assert algo.is_done
+
+    @pytest.mark.parametrize("num", [100000, 1])
+    def test_is_done_max_trials(self, num):
+        space = self.create_space()
+
+        MAX_TRIALS = 10
+        algo = self.create_algo(space=space)
+        algo.algorithm.max_trials = MAX_TRIALS
+
+        objective = 0
+        while not algo.is_done:
+            points = algo.suggest(num)
+            assert points is not None
+            if points:
+                self.observe_points(points, algo, objective)
+                objective += len(points)
+
+        # Hyperband should ignore max trials.
+        assert algo.n_observed > MAX_TRIALS
+        assert algo.is_done
+
+    @pytest.mark.skip(reason="See https://github.com/Epistimio/orion/issues/599")
+    def test_optimize_branin(self):
+        pass
+
+    def infer_repetition_and_rung(self, num):
+        budgets = list(np.cumsum(BUDGETS))
+        if num >= budgets[-1] * 2:
+            return 3, -1
+        elif num >= budgets[-1]:
+            return 2, -1
+
+        if num <= 1:
+            return 1, -1
+
+        return 1, budgets.index(num)
+
+    def assert_callbacks(self, spy, num, algo):
+        if num == 0:
+            return
+
+        repetition_id, rung_id = self.infer_repetition_and_rung(num)
+
+        brackets = algo.algorithm.brackets
+
+        assert len(brackets) == repetition_id * len(brackets[0].rungs)
+
+        for j in range(0, rung_id + 1):
+            for bracket in brackets:
+                if len(bracket.rungs) > j:
+                    assert len(bracket.rungs[j]["results"]) > 0, (bracket, j)
+
+
+BUDGETS = [20, 8, 3, 1]
+
+TestGenericHyperband.set_phases(
+    [("random", 0, "space.sample")]
+    + [
+        (f"rung{i}", budget, "suggest")
+        for i, budget in enumerate(np.cumsum(BUDGETS[:-1]))
+    ]
+    + [("rep1-rung1", sum(BUDGETS), "suggest")]
+    + [("rep2-rung1", sum(BUDGETS) * 2, "suggest")]
+)

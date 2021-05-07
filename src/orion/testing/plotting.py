@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Plotting testing support module
-=============================
+===============================
 
 Plotting testing support module providing defaults, functions and mocks.
 

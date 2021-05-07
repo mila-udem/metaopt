@@ -74,7 +74,7 @@ def test_state_dict(dumbalgo):
     """Check whether trials_info is in the state dict"""
     nested_algo = {"DumbAlgo": dict(value=6, scoring=5)}
     algo = dumbalgo(8, value=1, subone=nested_algo)
-    algo.suggest()
+    algo.suggest(1)
     assert not algo.state_dict["_trials_info"]
     algo.observe([(1, 2)], [{"objective": 3}])
     assert len(algo.state_dict["_trials_info"]) == 1
@@ -90,7 +90,7 @@ def test_is_done_cardinality(monkeypatch, dumbalgo):
     space.register(Integer("yolo1", "uniform", 1, 4))
 
     algo = dumbalgo(space)
-    algo.suggest()
+    algo.suggest(6)
     for i in range(1, 6):
         algo.observe([[i]], [{"objective": 3}])
 
@@ -101,7 +101,7 @@ def test_is_done_cardinality(monkeypatch, dumbalgo):
     space.register(Real("yolo1", "uniform", 1, 4))
 
     algo = dumbalgo(space)
-    algo.suggest()
+    algo.suggest(6)
     for i in range(1, 6):
         algo.observe([[i]], [{"objective": 3}])
 
@@ -117,7 +117,7 @@ def test_is_done_max_trials(monkeypatch, dumbalgo):
     space.register(Real("yolo1", "uniform", 1, 4))
 
     algo = dumbalgo(space)
-    algo.suggest()
+    algo.suggest(5)
     for i in range(1, 5):
         algo.observe([[i]], [{"objective": 3}])
 

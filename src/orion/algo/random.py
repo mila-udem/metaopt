@@ -8,7 +8,7 @@ Draw and deliver samples from prior defined in problem's domain.
 """
 import numpy
 
-from orion.algo.base import BaseAlgorithm, infer_trial_id
+from orion.algo.base import BaseAlgorithm
 
 
 class Random(BaseAlgorithm):
@@ -46,7 +46,7 @@ class Random(BaseAlgorithm):
         self.seed_rng(0)
         self.rng.set_state(state_dict["rng_state"])
 
-    def suggest(self, num=1):
+    def suggest(self, num):
         """Suggest a `num` of new sets of parameters. Randomly draw samples
         from the import space and return them.
 
@@ -56,16 +56,11 @@ class Random(BaseAlgorithm):
            `orion.algo.space.Space`.
         """
         points = []
-        point_ids = set(self._trials_info.keys())
-        i = 0
-        while len(points) < num:
-            new_point = self.space.sample(
-                1, seed=tuple(self.rng.randint(0, 1000000, size=3))
-            )[0]
-            point_id = infer_trial_id(new_point)
-            if point_id not in point_ids:
-                point_ids.add(point_id)
+        while len(points) < num and not self.is_done:
+            seed = tuple(self.rng.randint(0, 1000000, size=3))
+            new_point = self.space.sample(1, seed=seed)[0]
+            if not self.has_suggested(new_point):
+                self.register(new_point)
                 points.append(new_point)
-            i += 1
 
         return points

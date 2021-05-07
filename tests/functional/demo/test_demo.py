@@ -30,7 +30,7 @@ def test_demo_with_default_algo_cli_config_only(storage, monkeypatch):
             "-n",
             "default_algo",
             "--max-trials",
-            "30",
+            "5",
             "./black_box.py",
             "-x~uniform(-50, 50)",
         ]
@@ -42,7 +42,7 @@ def test_demo_with_default_algo_cli_config_only(storage, monkeypatch):
     assert "_id" in exp
     assert exp["name"] == "default_algo"
     assert exp["pool_size"] == 1
-    assert exp["max_trials"] == 30
+    assert exp["max_trials"] == 5
     assert exp["max_broken"] == 3
     assert exp["algorithms"] == {"random": {"seed": None}}
     assert "user" in exp["metadata"]
@@ -81,7 +81,7 @@ def test_demo(storage, monkeypatch):
     exp_id = exp["_id"]
     assert exp["name"] == "voila_voici"
     assert exp["pool_size"] == 1
-    assert exp["max_trials"] == 100
+    assert exp["max_trials"] == 20
     assert exp["max_broken"] == 5
     assert exp["algorithms"] == {
         "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-7}
@@ -132,7 +132,7 @@ def test_demo_with_script_config(storage, monkeypatch):
     exp_id = exp["_id"]
     assert exp["name"] == "voila_voici"
     assert exp["pool_size"] == 1
-    assert exp["max_trials"] == 100
+    assert exp["max_trials"] == 20
     assert exp["max_broken"] == 5
     assert exp["algorithms"] == {
         "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-7}
@@ -189,7 +189,7 @@ def test_demo_with_python_and_script(storage, monkeypatch):
     exp_id = exp["_id"]
     assert exp["name"] == "voila_voici"
     assert exp["pool_size"] == 1
-    assert exp["max_trials"] == 100
+    assert exp["max_trials"] == 20
     assert exp["max_broken"] == 5
     assert exp["algorithms"] == {
         "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-7}
@@ -258,7 +258,7 @@ def test_demo_two_workers(storage, monkeypatch):
                 "--config",
                 "./orion_config_random.yaml",
                 "--max-trials",
-                "100",
+                "20",
                 "./black_box.py",
                 "-x~norm(34, 3)",
             ]
@@ -276,7 +276,7 @@ def test_demo_two_workers(storage, monkeypatch):
     exp_id = exp["_id"]
     assert exp["name"] == "two_workers_demo"
     assert exp["pool_size"] == 2
-    assert exp["max_trials"] == 100
+    assert exp["max_trials"] == 20
     assert exp["max_broken"] == 5
     assert exp["algorithms"] == {"random": {"seed": None}}
     assert "user" in exp["metadata"]
@@ -289,7 +289,7 @@ def test_demo_two_workers(storage, monkeypatch):
     status = defaultdict(int)
     for trial in trials:
         status[trial.status] += 1
-    assert 100 <= status["completed"] <= 101
+    assert 20 <= status["completed"] <= 21
     assert status["new"] < 5
     params = trials[-1].params
     assert len(params) == 1
@@ -303,7 +303,7 @@ def test_workon():
     config = {"name": name}
     config["algorithms"] = {"gradient_descent": {"learning_rate": 0.1}}
     config["pool_size"] = 1
-    config["max_trials"] = 100
+    config["max_trials"] = 20
     config["exp_max_broken"] = 5
     config["user_args"] = [
         os.path.abspath(os.path.join(os.path.dirname(__file__), "black_box.py")),
@@ -313,7 +313,7 @@ def test_workon():
     with OrionState():
         experiment = experiment_builder.build_from_args(config)
 
-        workon(experiment, 100, 100, 100, 100, 100)
+        workon(experiment, 20, 20, 20, 20, 20)
 
         storage = get_storage()
 
@@ -323,7 +323,7 @@ def test_workon():
         assert "_id" in exp
         assert exp["name"] == name
         assert exp["pool_size"] == 1
-        assert exp["max_trials"] == 100
+        assert exp["max_trials"] == 20
         assert exp["max_broken"] == 5
         assert exp["algorithms"] == {
             "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-7}
@@ -612,21 +612,26 @@ def test_worker_trials(storage, monkeypatch):
     assert "_id" in exp
     exp_id = exp["_id"]
 
-    assert len(list(storage.fetch_trials(uid=exp_id))) == 0
+    def n_completed():
+        return len(
+            list(storage._fetch_trials({"experiment": exp_id, "status": "completed"}))
+        )
+
+    assert n_completed() == 0
 
     # Test only executes 2 trials
     orion.core.cli.main(
         ["hunt", "--name", "demo_random_search", "--worker-trials", "2"]
     )
 
-    assert len(list(storage.fetch_trials(uid=exp_id))) == 2
+    assert n_completed() == 2
 
     # Test only executes 3 more trials
     orion.core.cli.main(
         ["hunt", "--name", "demo_random_search", "--worker-trials", "3"]
     )
 
-    assert len(list(storage.fetch_trials(uid=exp_id))) == 5
+    assert n_completed() == 5
 
     # Test that max-trials has precedence over worker-trials
     orion.core.cli.main(
@@ -641,7 +646,7 @@ def test_worker_trials(storage, monkeypatch):
         ]
     )
 
-    assert len(list(storage.fetch_trials(uid=exp_id))) == 6
+    assert n_completed() == 6
 
 
 @pytest.mark.usefixtures("storage")
@@ -711,7 +716,7 @@ def test_demo_with_nondefault_config_keyword(storage, monkeypatch):
     exp_id = exp["_id"]
     assert exp["name"] == "voila_voici"
     assert exp["pool_size"] == 1
-    assert exp["max_trials"] == 100
+    assert exp["max_trials"] == 20
     assert exp["algorithms"] == {
         "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-7}
     }

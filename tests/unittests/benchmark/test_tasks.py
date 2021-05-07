@@ -27,7 +27,9 @@ class TestBranin:
         """Test to get task search space"""
         branin = Branin(2)
 
-        assert branin.get_search_space() == {"x": "uniform(0, 1, shape=2)"}
+        assert branin.get_search_space() == {
+            "x": "uniform(0, 1, shape=2, precision=10)"
+        }
 
 
 class TestCarromTable:

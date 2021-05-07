@@ -56,6 +56,8 @@ class Producer(object):
         self.params_hashes = set()
         self.naive_trials_history = None
         self.failure_count = 0
+        self.num_trials = 0
+        self.num_broken = 0
 
     @property
     def pool_size(self):
@@ -81,6 +83,12 @@ class Producer(object):
                 )
             )
 
+    def suggest(self):
+        """Try suggesting new points with the naive algorithm"""
+        num_pending = self.num_trials - self.num_broken
+        num = max(self.experiment.max_trials - num_pending, 1)
+        return self.naive_algorithm.suggest(num)
+
     def produce(self):
         """Create and register new trials."""
         sampled_points = 0
@@ -95,12 +103,12 @@ class Producer(object):
             self._sample_guard(start)
 
             log.debug("### Algorithm suggests new points.")
-            new_points = self.naive_algorithm.suggest(self.pool_size)
+            new_points = self.suggest()
 
             # Sync state of original algo so that state continues evolving.
             self.algorithm.set_state(self.naive_algorithm.state_dict)
 
-            if new_points is None:
+            if not new_points:
                 if self.algorithm.is_done:
                     return
 
@@ -109,10 +117,24 @@ class Producer(object):
                     "Waiting for current trials to finish"
                 )
 
-            for new_point in new_points:
-                sampled_points += self.register_trials(new_point)
+            registered_trials = self.register_trials(new_points)
 
-    def register_trials(self, new_point):
+            if registered_trials == 0:
+                self.backoff()
+
+            sampled_points += registered_trials
+
+    def register_trials(self, new_points):
+        """Register new sets of sampled parameters into the DB
+        guaranteeing their uniqueness
+        """
+        registered_trials = 0
+        for new_point in new_points:
+            registered_trials += self.register_trial(new_point)
+
+        return registered_trials
+
+    def register_trial(self, new_point):
         """Register a new set of sampled parameters into the DB
         guaranteeing their uniqueness
 
@@ -138,7 +160,6 @@ class Producer(object):
 
         except DuplicateKeyError:
             log.debug("#### Duplicate sample: %s", new_trial)
-            self.backoff()
             return 0
 
     def _prevalidate_trial(self, new_trial):
@@ -161,6 +182,8 @@ class Producer(object):
         ones.
         """
         trials = self.experiment.fetch_trials(with_evc_tree=True)
+        self.num_trials = len(trials)
+        self.num_broken = len([trial for trial in trials if trial.status == "broken"])
 
         self._update_algorithm(
             [trial for trial in trials if trial.status == "completed"]
@@ -175,7 +198,10 @@ class Producer(object):
 
         new_completed_trials = []
         for trial in completed_trials:
-            if trial not in self.trials_history:
+            # if trial not in self.trials_history:
+            if not self.algorithm.has_observed(
+                format_trials.trial_to_tuple(trial, self.space)
+            ):
                 new_completed_trials.append(trial)
 
         log.debug("### %s", new_completed_trials)

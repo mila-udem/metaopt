@@ -41,12 +41,13 @@ def fidelity_grid(dim, num):
 
 def categorical_grid(dim, num):
     """Build categorical grid, that is, all categories"""
-    if len(dim.categories) != num:
+    categories = dim.interval()
+    if len(categories) != num:
         log.warning(
-            f"Categorical dimension {dim.name} does not have {num} choices: {dim.categories}. "
-            "Will use {len(dim.categories)} choices instead."
+            f"Categorical dimension {dim.name} does not have {num} choices: {categories}. "
+            "Will use {len(categories)} choices instead."
         )
-    return dim.categories
+    return categories
 
 
 def discrete_grid(dim, num):
@@ -188,7 +189,7 @@ class GridSearch(BaseAlgorithm):
         super(GridSearch, self).set_state(state_dict)
         self.grid = state_dict["grid"]
 
-    def suggest(self, num=1):
+    def suggest(self, num):
         """Return the entire grid of suggestions
 
         Returns
@@ -201,7 +202,16 @@ class GridSearch(BaseAlgorithm):
         """
         if self.grid is None:
             self._initialize()
-        return self.grid
+        i = 0
+        points = []
+        while len(points) < num and i < len(self.grid):
+            point = self.grid[i]
+            if not self.has_suggested(point):
+                self.register(point)
+                points.append(point)
+            i += 1
+
+        return points
 
     @property
     def is_done(self):
@@ -209,7 +219,7 @@ class GridSearch(BaseAlgorithm):
         return (
             super(GridSearch, self).is_done
             or self.grid is not None
-            and len(self._trials_info) >= len(self.grid)
+            and self.n_suggested >= len(self.grid)
         )
 
     @property

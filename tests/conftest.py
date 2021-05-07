@@ -23,6 +23,9 @@ from orion.storage.base import Storage, get_storage, setup_storage
 from orion.storage.legacy import Legacy
 from orion.testing import OrionState
 
+# So that assert messages show up in tests defined outside testing suite.
+pytest.register_assert_rewrite("orion.testing")
+
 
 def pytest_addoption(parser):
     parser.addoption(
@@ -90,6 +93,7 @@ class DumbAlgo(BaseAlgorithm):
         self._score_point = None
         self._judge_point = None
         self._measurements = None
+        self.pool_size = 1
         self.possible_values = [value]
         super(DumbAlgo, self).__init__(
             space,
@@ -135,8 +139,9 @@ class DumbAlgo(BaseAlgorithm):
         self._num = state_dict["num"]
         self.done = state_dict["done"]
 
-    def suggest(self, num=1):
+    def suggest(self, num):
         """Suggest based on `value`."""
+        num = min(num, self.pool_size)
         self._num += num
 
         rval = []

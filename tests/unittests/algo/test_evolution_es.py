@@ -10,6 +10,7 @@ import pytest
 
 from orion.algo.evolution_es import BracketEVES, EvolutionES, compute_budgets
 from orion.algo.space import Fidelity, Real, Space
+from orion.testing.algo import BaseAlgoTests
 
 
 @pytest.fixture
@@ -55,7 +56,7 @@ def evolution(space1):
 @pytest.fixture
 def bracket(budgets, evolution, space1):
     """Return a `Bracket` instance configured with `b_config`."""
-    return BracketEVES(evolution, budgets, 1, space1)
+    return BracketEVES(evolution, budgets, 1)
 
 
 @pytest.fixture
@@ -159,19 +160,22 @@ def test_compute_budgets():
 def test_customized_mutate_population(space1, rung_3, budgets):
     """Verify customized mutated candidates is generated correctly."""
     customerized_dict = {
-        "function": "orion.testing.state.customized_mutate_example",
+        "function": "orion.testing.algo.customized_mutate_example",
         "multiply_factor": 2.0,
         "add_factor": 1,
     }
+    population_range = len(rung_3["results"])
     algo = EvolutionES(
-        space1, repetitions=1, nums_population=4, mutate=customerized_dict
+        space1,
+        repetitions=1,
+        nums_population=population_range,
+        mutate=customerized_dict,
     )
-    algo.brackets[0] = BracketEVES(algo, budgets, 1, space1)
+    algo.brackets[0] = BracketEVES(algo, budgets, 1)
 
     red_team = [0, 2]
     blue_team = [1, 3]
-    population_range = 4
-    for i in range(4):
+    for i in range(population_range):
         for j in [1, 2]:
             algo.brackets[0].eves.population[j][i] = list(rung_3["results"].values())[
                 i
@@ -189,7 +193,7 @@ def test_customized_mutate_population(space1, rung_3, budgets):
     org_data = copy.deepcopy(org_data)
 
     algo.brackets[0]._mutate_population(
-        red_team, blue_team, rung_3["results"], population_range
+        red_team, blue_team, rung_3["results"], population_range, fidelity=2
     )
 
     mutated_data = np.stack(
@@ -281,7 +285,7 @@ class TestBracketEVES:
         org_data = copy.deepcopy(org_data)
 
         bracket._mutate_population(
-            red_team, blue_team, rung_3["results"], population_range
+            red_team, blue_team, rung_3["results"], population_range, fidelity=2
         )
 
         mutated_data = np.stack(
@@ -323,7 +327,7 @@ class TestBracketEVES:
                     j
                 ]
         points, nums_all_equal = bracket._mutate_population(
-            red_team, blue_team, rung_4["results"], population_range
+            red_team, blue_team, rung_4["results"], population_range, fidelity=2
         )
 
         # In this case, duplication will occur, and we can make it mutate one more time.
@@ -349,8 +353,118 @@ class TestBracketEVES:
                     j
                 ]
         points, nums_all_equal = bracket._mutate_population(
-            red_team, blue_team, rung_3["results"], population_range
+            red_team, blue_team, rung_3["results"], population_range, fidelity=2
         )
-        assert points[0] == (1.0, 1.0, 1.0)
+        assert points[0] == (2, 1.0, 1.0)
         assert points[1] == (2, 1.0 / 2, 1.0 / 4)
         assert (nums_all_equal == 0).all()
+
+
+class TestGenericEvolutionES(BaseAlgoTests):
+    algo_name = "evolutiones"
+    config = {
+        "seed": 123456,
+        "repetitions": 3,
+        "nums_population": 20,
+        "max_retries": 1000,
+        "mutate": None,
+    }
+    space = {"x": "uniform(0, 1)", "f": "fidelity(1, 10, base=2)"}
+
+    @pytest.mark.skip(reason="See https://github.com/Epistimio/orion/issues/598")
+    def test_is_done_cardinality(self):
+        space = self.update_space(
+            {
+                # Increase fidelity to increase number of trials in first rungs
+                "f": "fidelity(1, 100, base=2)",
+                "x": "uniform(0, 4, discrete=True)",
+                "y": "choices(['a', 'b', 'c'])",
+                "z": "loguniform(1, 6, discrete=True)",
+            }
+        )
+        space = self.create_space(space)
+        assert space.cardinality == 5 * 3 * 6
+
+        algo = self.create_algo(space=space)
+
+        for rung in range(len(algo.algorithm.brackets[0].rungs)):
+            assert not algo.is_done
+            n_sampled = len(algo.algorithm.sampled)
+            n_trials = len(algo.algorithm.trial_to_brackets)
+            points = algo.suggest()
+            if points is None:
+                break
+            assert len(algo.algorithm.sampled) == n_sampled + len(points)
+            assert len(algo.algorithm.trial_to_brackets) == space.cardinality
+
+            # We reached max number of trials we can suggest before observing any.
+            assert algo.suggest() is None
+
+            assert not algo.is_done
+
+            for i, point in enumerate(points):
+                algo.observe([point], [dict(objective=i)])
+
+        assert algo.is_done
+
+    @pytest.mark.parametrize("num", [100000, 1])
+    def test_is_done_max_trials(self, num):
+        space = self.create_space()
+
+        MAX_TRIALS = 10
+        algo = self.create_algo(space=space)
+        algo.algorithm.max_trials = MAX_TRIALS
+
+        objective = 0
+        while not algo.is_done:
+            points = algo.suggest(num)
+            assert points
+            if points:
+                self.observe_points(points, algo, objective)
+                objective += len(points)
+
+        # Hyperband should ignore max trials.
+        assert algo.n_observed > MAX_TRIALS
+        assert algo.is_done
+
+    @pytest.mark.skip(reason="See https://github.com/Epistimio/orion/issues/599")
+    def test_optimize_branin(self):
+        pass
+
+    def infer_repetition_and_rung(self, num):
+        budgets = list(np.cumsum(BUDGETS))
+        if num >= budgets[-1] * 2:
+            return 3, -1
+        elif num >= budgets[-1]:
+            return 2, -1
+
+        if num <= 1:
+            return 1, -1
+
+        return 1, budgets.index(num)
+
+    def assert_callbacks(self, spy, num, algo):
+
+        if num == 0:
+            return
+
+        repetition_id, rung_id = self.infer_repetition_and_rung(num)
+
+        brackets = algo.algorithm.brackets
+
+        assert len(brackets) == repetition_id
+
+        for j in range(0, rung_id + 1):
+            for bracket in brackets:
+                assert len(bracket.rungs[j]["results"]) > 0, (bracket, j)
+
+
+BUDGETS = [20, 20, 20, 20]
+
+
+TestGenericEvolutionES.set_phases(
+    [("random", 0, "space.sample")]
+    + [(f"rung{i}", budget, "suggest") for i, budget in enumerate(np.cumsum(BUDGETS))]
+    + [("rep1-rung1", sum(BUDGETS), "suggest")]
+    + [("rep2-rung1", sum(BUDGETS) * 2, "suggest")]
+)

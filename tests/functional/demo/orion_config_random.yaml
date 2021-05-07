@@ -1,7 +1,7 @@
 name: demo_random_search
 
 pool_size: 2
-max_trials: 400
+max_trials: 20
 max_broken: 5
 
 algorithms: random

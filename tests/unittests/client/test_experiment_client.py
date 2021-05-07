@@ -630,7 +630,7 @@ class TestSuggest:
             trial = client.suggest()
             assert trial.status == "reserved"
             assert trial.params["x"] == 57.57
-            assert len(experiment.fetch_trials()) == 6
+            assert len(experiment.fetch_trials()) > 5
 
             assert client._pacemakers[trial.id].is_alive()
             for trial_id in list(client._pacemakers.keys()):
@@ -681,7 +681,7 @@ class TestSuggest:
             """Never suggest a new trial"""
             return None
 
-        monkeypatch.setattr(orion.core.config.worker, "max_idle_time", 0)
+        monkeypatch.setattr(orion.core.config.worker, "max_idle_time", -1)
 
         with create_experiment(config, base_trial, statuses=["completed"]) as (
             cfg,
@@ -907,7 +907,7 @@ class TestWorkon:
             client,
         ):
             client.workon(foo, max_trials=5)
-            assert len(experiment.fetch_trials()) == 5
+            assert len(experiment.fetch_trials_by_status("completed")) == 5
             assert client._pacemakers == {}
 
     def test_workon_partial(self):
@@ -940,7 +940,7 @@ class TestWorkon:
             default_y = 2
             assert len(experiment.fetch_trials()) == 0
             client.workon(foo, max_trials=1, y=default_y)
-            assert len(experiment.fetch_trials()) == 1
+            assert len(experiment.fetch_trials_by_status("completed")) == 1
             assert experiment.fetch_trials()[0].params["y"] != 2
 
     def test_workon_hierarchical_partial_with_override(self):
@@ -964,7 +964,7 @@ class TestWorkon:
         ) as (cfg, experiment, client):
             assert len(experiment.fetch_trials()) == 0
             client.workon(foo, max_trials=5, b={"y": default_y, "z": default_z})
-            assert len(experiment.fetch_trials()) == 5
+            assert len(experiment.fetch_trials_by_status("completed")) == 5
             params = experiment.fetch_trials()[0].params
             assert len(params)
             assert "x" in params["a"]

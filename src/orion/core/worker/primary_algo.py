@@ -56,7 +56,7 @@ class PrimaryAlgo(BaseAlgorithm):
         """
         self.algorithm.set_state(state_dict)
 
-    def suggest(self, num=1):
+    def suggest(self, num):
         """Suggest a `num` of new sets of parameters.
 
         :param num: how many sets to be suggested.
@@ -80,7 +80,11 @@ Space: {}""".format(
                     )
                 )
 
-        return [self.transformed_space.reverse(point) for point in points]
+        rpoints = []
+        for point in points:
+            rpoints.append(self.transformed_space.reverse(point))
+
+        return rpoints
 
     def observe(self, points, results):
         """Observe evaluation `results` corresponding to list of `points` in
@@ -94,6 +98,32 @@ Space: {}""".format(
             assert point in self.space
             tpoints.append(self.transformed_space.transform(point))
         self.algorithm.observe(tpoints, results)
+
+    def has_suggested(self, point):
+        """Whether the algorithm has suggested a given point.
+
+        .. seealso:: `orion.algo.base.BaseAlgorithm.has_suggested`
+
+        """
+        return self.algorithm.has_suggested(self.transformed_space.transform(point))
+
+    def has_observed(self, point):
+        """Whether the algorithm has observed a given point.
+
+        .. seealso:: `orion.algo.base.BaseAlgorithm.has_observed`
+
+        """
+        return self.algorithm.has_observed(self.transformed_space.transform(point))
+
+    @property
+    def n_suggested(self):
+        """Number of trials suggested by the algorithm"""
+        return self.algorithm.n_suggested
+
+    @property
+    def n_observed(self):
+        """Number of completed trials observed by the algorithm"""
+        return self.algorithm.n_observed
 
     @property
     def is_done(self):
