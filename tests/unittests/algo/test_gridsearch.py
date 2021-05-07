@@ -13,7 +13,7 @@ from orion.algo.gridsearch import (
     real_grid,
 )
 from orion.algo.space import Categorical, Integer, Real, Space
-from orion.testing.algo import BaseAlgoTests
+from orion.testing.algo import BaseAlgoTests, phase
 
 
 def test_categorical_grid():
@@ -168,10 +168,12 @@ class TestGridSearch(BaseAlgoTests):
     algo_name = "gridsearch"
     config = {"n_values": 10}
 
-    def test_suggest(self, mocker, num, attr):
+    @phase
+    def test_suggest_lots(self, mocker, num, attr):
+        """Test that gridsearch returns the whole grid when requesting more points"""
         algo = self.create_algo()
         spy = self.spy_phase(mocker, num, algo, attr)
-        points = algo.suggest()
+        points = algo.suggest(10000)
         assert len(points) == len(algo.algorithm.grid)
 
     @pytest.mark.skip(reason="Deterministic algorithm")

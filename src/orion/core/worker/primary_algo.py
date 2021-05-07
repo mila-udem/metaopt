@@ -56,7 +56,7 @@ class PrimaryAlgo(BaseAlgorithm):
         """
         self.algorithm.set_state(state_dict)
 
-    def suggest(self, num=None):
+    def suggest(self, num):
         """Suggest a `num` of new sets of parameters.
 
         :param num: how many sets to be suggested.

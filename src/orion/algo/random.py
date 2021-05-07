@@ -46,7 +46,7 @@ class Random(BaseAlgorithm):
         self.seed_rng(0)
         self.rng.set_state(state_dict["rng_state"])
 
-    def suggest(self, num=None):
+    def suggest(self, num):
         """Suggest a `num` of new sets of parameters. Randomly draw samples
         from the import space and return them.
 
@@ -55,9 +55,6 @@ class Random(BaseAlgorithm):
         .. note:: New parameters must be compliant with the problem's domain
            `orion.algo.space.Space`.
         """
-        if num is None:
-            num = max(self.max_trials - self.n_suggested, 1)
-
         points = []
         while len(points) < num and not self.is_done:
             seed = tuple(self.rng.randint(0, 1000000, size=3))

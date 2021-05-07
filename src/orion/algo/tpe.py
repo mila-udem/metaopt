@@ -284,8 +284,9 @@ class TPE(BaseAlgorithm):
         .. note:: New parameters must be compliant with the problem's domain
            `orion.algo.space.Space`.
         """
-        if num is None:
-            num = max(self.n_initial_points - self.n_observed, 1)
+        # Only sample up to `n_initial_points` and after that only sample one at a time.
+        num = min(num, max(self.n_initial_points - self.n_suggested, 1))
+
         samples = []
         candidates = []
         while len(samples) < num and self.n_suggested < self.space.cardinality:

@@ -59,11 +59,12 @@ class TestPrimaryAlgoWraps(object):
 
     def test_suggest(self, palgo, fixed_suggestion):
         """Suggest wraps suggested."""
-        assert palgo.suggest() == [fixed_suggestion]
+        palgo.algorithm.pool_size = 10
+        assert palgo.suggest(1) == [fixed_suggestion]
         assert palgo.suggest(4) == [fixed_suggestion] * 4
         palgo.algorithm.possible_values = [(5,)]
         with pytest.raises(ValueError):
-            palgo.suggest()
+            palgo.suggest(1)
 
     def test_observe(self, palgo, fixed_suggestion):
         """Observe wraps observations."""

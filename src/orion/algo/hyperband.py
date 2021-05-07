@@ -290,7 +290,7 @@ class Hyperband(BaseAlgorithm):
 
         return samples
 
-    def suggest(self, num=None):
+    def suggest(self, num):
         """Suggest a number of new sets of parameters.
 
         Sample new points until first rung is filled. Afterwards
@@ -310,9 +310,6 @@ class Hyperband(BaseAlgorithm):
             trials to complete), in which case it will return None.
 
         """
-        if num is None:
-            num = 100000
-
         self._refresh_brackets()
 
         samples = self.promote(num)

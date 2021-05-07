@@ -4,6 +4,7 @@ import copy
 import functools
 import inspect
 import itertools
+from collections import defaultdict
 
 import numpy
 import pytest
@@ -46,16 +47,24 @@ def spy_attr(mocker, algo, attribute):
     return mocker.spy(obj, attr_to_mock)
 
 
-methods_with_phase = set()
+methods_with_phase = defaultdict(set)
+
+
+phase_docstring = """\
+This test is parametrizable with phases.
+See ``orion.testing.algo.BaseAlgoTests.set_phases``.\
+"""
 
 
 def phase(method):
     """Decorator to mark methods that must be parametrized with phases."""
-    methods_with_phase.add(method.__name__)
-    method.__doc__ += (
-        "\n\nThis test is parametrizable with phases. See "
-        "``orion.testing.algo.BaseAlgoTests.set_phases``."
-    )
+    class_name = ".".join(method.__qualname__.split(".")[:-1])
+    methods_with_phase[class_name].add(method.__name__)
+
+    if method.__doc__ is None:
+        method.__doc__ = phase_docstring
+    else:
+        method.__doc__ += "\n\n" + phase_docstring
 
     return method
 
@@ -137,7 +146,11 @@ class BaseAlgoTests:
         ids = [phase[0] for phase in phases]
         attrs = [phase[1:] for phase in phases]
 
-        for method_name in sorted(methods_with_phase):
+        cls_methods_with_phase = (
+            methods_with_phase["BaseAlgoTests"] | methods_with_phase[cls.__name__]
+        )
+
+        for method_name in sorted(cls_methods_with_phase):
             parametrize_this(cls, method_name, attrs, ids)
 
     def create_algo(self, config=None, space=None, **kwargs):
@@ -317,7 +330,7 @@ class BaseAlgoTests:
 
         spy = self.spy_phase(mocker, num, algo, attr)
 
-        points = algo.suggest()
+        points = algo.suggest(1)
         assert points[0] in space
         spy.call_count == 1
         self.observe_points(points, algo, 1)
@@ -399,18 +412,6 @@ class BaseAlgoTests:
         numpy.testing.assert_equal(a, new_algo.suggest(1)[0])
 
         self.assert_callbacks(spy, num, algo)
-
-    @phase
-    def test_suggest(self, mocker, num, attr):
-        """Verify that suggest returns correct number of points.
-
-        This method will likely require to be overriden based on the behavior of the algorith
-        for ``suggest(num=None)``.
-        """
-        algo = self.create_algo()
-        spy = self.spy_phase(mocker, num, algo, attr)
-        points = algo.suggest()
-        assert len(points) == 1
 
     @phase
     def test_suggest_n(self, mocker, num, attr):
@@ -607,7 +608,7 @@ class BaseAlgoTests:
                 break
 
             if not points:
-                points = algo.suggest()
+                points = algo.suggest(MAX_TRIALS - len(objectives))
 
             point = points.pop(0)
             results = task(*point)

@@ -56,6 +56,8 @@ class Producer(object):
         self.params_hashes = set()
         self.naive_trials_history = None
         self.failure_count = 0
+        self.num_trials = 0
+        self.num_broken = 0
 
     @property
     def pool_size(self):
@@ -81,6 +83,12 @@ class Producer(object):
                 )
             )
 
+    def suggest(self):
+        """Try suggesting new points with the naive algorithm"""
+        num_pending = self.num_trials - self.num_broken
+        num = max(self.experiment.max_trials - num_pending, 1)
+        return self.naive_algorithm.suggest(num)
+
     def produce(self):
         """Create and register new trials."""
         sampled_points = 0
@@ -95,7 +103,7 @@ class Producer(object):
             self._sample_guard(start)
 
             log.debug("### Algorithm suggests new points.")
-            new_points = self.naive_algorithm.suggest()
+            new_points = self.suggest()
 
             # Sync state of original algo so that state continues evolving.
             self.algorithm.set_state(self.naive_algorithm.state_dict)
@@ -174,6 +182,8 @@ class Producer(object):
         ones.
         """
         trials = self.experiment.fetch_trials(with_evc_tree=True)
+        self.num_trials = len(trials)
+        self.num_broken = len([trial for trial in trials if trial.status == "broken"])
 
         self._update_algorithm(
             [trial for trial in trials if trial.status == "completed"]

@@ -212,14 +212,14 @@ class BaseAlgorithm(object, metaclass=ABCMeta):
         return None
 
     @abstractmethod
-    def suggest(self, num=1):
+    def suggest(self, num):
         """Suggest a `num` of new sets of parameters.
 
         Parameters
         ----------
-        num: int, optional
-            Number of points to suggest. Defaults to None, in which case the algorithms
-            returns the number of points it considers most optimal.
+        num: int
+            Number of points to suggest. The algorithm may return less than the number of points
+            requested.
 
         Returns
         -------

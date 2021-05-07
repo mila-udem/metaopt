@@ -191,11 +191,8 @@ class ASHA(Hyperband):
 
         return samples
 
-    def suggest(self, num=None):
-        if num is None:
-            num = 1
-
-        return super(ASHA, self).suggest(num)
+    def suggest(self, num):
+        return super(ASHA, self).suggest(1)
 
     def create_bracket(self, i, budgets, iteration):
         return ASHABracket(self, budgets, iteration)

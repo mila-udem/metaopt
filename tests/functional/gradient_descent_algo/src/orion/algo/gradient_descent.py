@@ -27,15 +27,13 @@ class Gradient_Descent(BaseAlgorithm):
         self.current_point = None
         self.gradient = numpy.array([numpy.inf])
 
-    def suggest(self, num=None):
+    def suggest(self, num):
         """Suggest a `num`ber of new sets of parameters.
 
         Perform a step towards negative gradient and suggest that point.
 
         """
-        if num is None:
-            num = 1
-        assert num == 1  # Simple gradient descent does not make sense else
+        num = 1  # Simple gradient descent only make sense for 1 point at a time.
 
         if not self.has_observed_once:
             return self.space.sample(1)

@@ -409,7 +409,7 @@ class TestASHA:
 
         monkeypatch.setattr(asha.space, "sample", sample)
 
-        points = asha.suggest()
+        points = asha.suggest(1)
 
         assert points == [(1, 0.5)]
 
@@ -440,7 +440,7 @@ class TestASHA:
 
         monkeypatch.setattr(asha.space, "sample", sample)
 
-        assert asha.suggest()[0][1] == new_point[1]
+        assert asha.suggest(1)[0][1] == new_point[1]
 
     def test_suggest_inf_duplicates(
         self, monkeypatch, asha, bracket, rung_0, rung_1, rung_2
@@ -457,7 +457,7 @@ class TestASHA:
 
         monkeypatch.setattr(asha.space, "sample", sample)
 
-        assert asha.suggest() == []
+        assert asha.suggest(1) == []
 
     def test_suggest_in_finite_cardinality(self):
         """Test that suggest None when search space is empty"""
@@ -472,7 +472,7 @@ class TestASHA:
         for i in range(2):
             force_observe(asha, (3, i), {"objective": i})
 
-        assert asha.suggest() == []
+        assert asha.suggest(1) == []
 
     def test_suggest_promote(self, asha, bracket, rung_0):
         """Test that correct point is promoted and returned."""
@@ -480,7 +480,7 @@ class TestASHA:
         bracket.asha = asha
         bracket.rungs[0] = rung_0
 
-        points = asha.suggest()
+        points = asha.suggest(1)
 
         assert points == [(3, 0.0)]
 
@@ -495,15 +495,11 @@ class TestGenericASHA(BaseAlgoTests):
     }
     space = {"x": "uniform(0, 1)", "f": "fidelity(1, 10, base=2)"}
 
-    def get_num(self, num):
-        return min(1, num)
-
     def test_suggest_n(self, mocker, num, attr):
         algo = self.create_algo()
         spy = self.spy_phase(mocker, num, algo, attr)
         points = algo.suggest(5)
-        repetition_id, rung_id = self.infer_repetition_and_rung(num)
-        assert len(points) == 5 if rung_id != 2 else 1
+        assert len(points) == 1
 
     @pytest.mark.skip(reason="See https://github.com/Epistimio/orion/issues/598")
     def test_is_done_cardinality(self):
@@ -527,7 +523,7 @@ class TestGenericASHA(BaseAlgoTests):
                 assert not algo.is_done
                 n_sampled = len(algo.algorithm.sampled)
                 n_trials = len(algo.algorithm.trial_to_brackets)
-                new_points = algo.suggest()
+                new_points = algo.suggest(1)
                 if new_points is None:
                     break
                 points += new_points
@@ -553,7 +549,7 @@ class TestGenericASHA(BaseAlgoTests):
 
         objective = 0
         while not algo.is_done:
-            points = algo.suggest()
+            points = algo.suggest(1)
             assert points is not None
             if points:
                 self.observe_points(points, algo, objective)

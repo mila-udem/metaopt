@@ -61,6 +61,8 @@ def producer(monkeypatch, hacked_exp, random_dt, categorical_values):
     assert hacked_exp.pool_size == 1
     hacked_exp.algorithms.algorithm.possible_values = categorical_values
     hacked_exp.algorithms.seed_rng(0)
+    hacked_exp.max_trials = 20
+    hacked_exp.algorithms.algorithm.max_trials = 20
 
     hacked_exp.producer["strategy"] = DumbParallelStrategy()
 
@@ -444,7 +446,7 @@ def test_duplicate_within_pool(producer, storage, random_dt):
     new_trials_in_db_before = len(storage._fetch_trials({"status": "new"}))
 
     producer.experiment.pool_size = 2
-    producer.algorithm.algorithm.default_num = 2
+    producer.algorithm.algorithm.pool_size = 2
 
     producer.experiment.algorithms.algorithm.possible_values = [
         ("gru", "rnn"),
@@ -488,7 +490,7 @@ def test_duplicate_within_pool_and_db(producer, storage, random_dt):
     new_trials_in_db_before = len(storage._fetch_trials({"status": "new"}))
 
     producer.experiment.pool_size = 2
-    producer.algorithm.algorithm.default_num = 2
+    producer.algorithm.algorithm.pool_size = 2
 
     producer.experiment.algorithms.algorithm.possible_values = [
         ("gru", "rnn"),
@@ -702,3 +704,41 @@ def test_algorithm_is_done(monkeypatch, producer):
     assert len(producer.experiment.fetch_trials()) == producer.experiment.max_trials
     assert producer.naive_algorithm.is_done
     assert not producer.experiment.is_done
+
+
+def test_suggest_n_max_trials(monkeypatch, producer):
+    """Verify that producer suggest only max_trials - non_broken points."""
+    producer.experiment.max_trials = 10
+    producer.experiment.algorithms.algorithm.max_trials = 10
+    producer = Producer(producer.experiment)
+
+    def suggest_n(self, num):
+        """Return duplicated points based on `num`"""
+        return [("gru", "rnn")] * num
+
+    monkeypatch.setattr(
+        producer.experiment.algorithms.algorithm.__class__, "suggest", suggest_n
+    )
+
+    assert len(producer.experiment.fetch_trials(with_evc_tree=True)) == 7
+
+    # Setup naive algorithm
+    producer.update()
+
+    assert len(producer.suggest()) == 3
+    producer.experiment.max_trials = 7
+    assert len(producer.suggest()) == 1
+    producer.experiment.max_trials = 5
+    assert len(producer.suggest()) == 1
+
+    trials = producer.experiment.fetch_trials()
+    for trial in trials[:4]:
+        producer.experiment._storage.set_trial_status(trial, "broken")
+
+    assert len(producer.experiment.fetch_trials_by_status("broken")) == 4
+
+    # Update broken count in producer
+    producer.update()
+
+    # There is now 3 completed and 4 broken. Max trials is 5. Producer should suggest 2
+    assert len(producer.suggest()) == 2

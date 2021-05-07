@@ -371,13 +371,6 @@ class TestGenericEvolutionES(BaseAlgoTests):
     }
     space = {"x": "uniform(0, 1)", "f": "fidelity(1, 10, base=2)"}
 
-    def test_suggest(self, mocker, num, attr):
-        algo = self.create_algo()
-        spy = self.spy_phase(mocker, num, algo, attr)
-        points = algo.suggest()
-        repetition_id, rung_id = self.infer_repetition_and_rung(num)
-        assert len(points) == BUDGETS[rung_id + 1 if rung_id < 3 else 0]
-
     @pytest.mark.skip(reason="See https://github.com/Epistimio/orion/issues/598")
     def test_is_done_cardinality(self):
         space = self.update_space(
@@ -414,7 +407,7 @@ class TestGenericEvolutionES(BaseAlgoTests):
 
         assert algo.is_done
 
-    @pytest.mark.parametrize("num", [None, 1])
+    @pytest.mark.parametrize("num", [100000, 1])
     def test_is_done_max_trials(self, num):
         space = self.create_space()
 

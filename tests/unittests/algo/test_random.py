@@ -13,14 +13,5 @@ class TestRandomSearch(BaseAlgoTests):
     algo_name = "random"
     config = {"seed": 123456}
 
-    def test_suggest(self, mocker, num, attr):
-        """Verify that suggest returns correct number of points."""
-        algo = self.create_algo()
-        spy = self.spy_phase(mocker, num, algo, attr)
-        points = algo.suggest()
-        assert len(points) == self.max_trials
-        points = algo.suggest()
-        assert len(points) == 1
-
 
 TestRandomSearch.set_phases([("random", 0, "space.sample")])

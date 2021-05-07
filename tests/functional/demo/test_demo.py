@@ -612,21 +612,26 @@ def test_worker_trials(storage, monkeypatch):
     assert "_id" in exp
     exp_id = exp["_id"]
 
-    assert len(list(storage.fetch_trials(uid=exp_id))) == 0
+    def n_completed():
+        return len(
+            list(storage._fetch_trials({"experiment": exp_id, "status": "completed"}))
+        )
+
+    assert n_completed() == 0
 
     # Test only executes 2 trials
     orion.core.cli.main(
         ["hunt", "--name", "demo_random_search", "--worker-trials", "2"]
     )
 
-    assert len(list(storage.fetch_trials(uid=exp_id))) == 2
+    assert n_completed() == 2
 
     # Test only executes 3 more trials
     orion.core.cli.main(
         ["hunt", "--name", "demo_random_search", "--worker-trials", "3"]
     )
 
-    assert len(list(storage.fetch_trials(uid=exp_id))) == 5
+    assert n_completed() == 5
 
     # Test that max-trials has precedence over worker-trials
     orion.core.cli.main(
@@ -641,7 +646,7 @@ def test_worker_trials(storage, monkeypatch):
         ]
     )
 
-    assert len(list(storage.fetch_trials(uid=exp_id))) == 6
+    assert n_completed() == 6
 
 
 @pytest.mark.usefixtures("storage")

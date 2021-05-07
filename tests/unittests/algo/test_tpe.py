@@ -698,12 +698,40 @@ class TestTPE(BaseAlgoTests):
         "full_weight_num": 10,
     }
 
-    def test_suggest(self, mocker, num, attr):
+    def test_suggest_init(self, mocker):
+        algo = self.create_algo()
+        spy = self.spy_phase(mocker, 0, algo, "space.sample")
+        points = algo.suggest(1000)
+        assert len(points) == N_INIT
+
+    def test_suggest_init_missing(self, mocker):
+        algo = self.create_algo()
+        missing = 3
+        spy = self.spy_phase(mocker, N_INIT - missing, algo, "space.sample")
+        points = algo.suggest(1000)
+        assert len(points) == missing
+
+    def test_suggest_init_overflow(self, mocker):
+        algo = self.create_algo()
+        spy = self.spy_phase(mocker, N_INIT - 1, algo, "space.sample")
+        # Now reaching N_INIT
+        points = algo.suggest(1000)
+        assert len(points) == 1
+        # Verify point was sampled randomly, not using BO
+        assert spy.call_count == 1
+        # Overflow above N_INIT
+        points = algo.suggest(1000)
+        assert len(points) == 1
+        # Verify point was sampled randomly, not using BO
+        assert spy.call_count == 2
+
+    def test_suggest_n(self, mocker, num, attr):
+        """Verify that suggest returns correct number of trials if ``num`` is specified in ``suggest``."""
         algo = self.create_algo()
         spy = self.spy_phase(mocker, num, algo, attr)
-        points = algo.suggest()
+        points = algo.suggest(5)
         if num == 0:
-            assert len(points) == N_INIT
+            assert len(points) == 5
         else:
             assert len(points) == 1
 
