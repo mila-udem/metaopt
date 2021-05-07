@@ -265,6 +265,7 @@ class Experiment:
             except FailedUpdate:
                 log.debug("failed")
 
+    # pylint:disable=unused-argument
     def update_completed_trial(self, trial, results_file=None):
         """Inform database about an evaluated `trial` with results.
 
@@ -279,7 +280,7 @@ class Experiment:
         self._check_if_executable()
         trial.status = "completed"
         trial.end_time = datetime.datetime.utcnow()
-        self._storage.retrieve_result(trial, results_file)
+        self._storage.retrieve_result(trial)
         # push trial results updates the entire trial status included
         log.info("Completed trials with results: %s", trial.results)
         self._storage.push_trial_results(trial)

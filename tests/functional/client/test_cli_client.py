@@ -6,6 +6,7 @@ import os
 import pytest
 
 import orion.core.cli
+from orion.core.utils.exceptions import InvalidResult
 from orion.core.worker.consumer import Consumer
 
 
@@ -65,8 +66,10 @@ def test_interrupt_diff_code(storage, monkeypatch, capsys):
                 "hunt",
                 "--config",
                 "./orion_config.yaml",
-                "--worker-trials",
+                "--worker-max-broken",
                 "2",
+                "--worker-trials",
+                "5",
                 "python",
                 "black_box.py",
                 "interrupt_trial",
@@ -196,7 +199,7 @@ def test_report_with_bad_objective(storage, monkeypatch, fct):
 
     user_args = ["-x~uniform(-50, 50, precision=5)"]
 
-    with pytest.raises(ValueError) as exc:
+    with pytest.raises(InvalidResult) as exc:
         orion.core.cli.main(
             [
                 "hunt",

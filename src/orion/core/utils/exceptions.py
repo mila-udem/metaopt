@@ -108,6 +108,12 @@ class WaitingForTrials(Exception):
     pass
 
 
+class CompletedExperiment(Exception):
+    """Raised when attempting to suggest new trials for an experiment that is completed"""
+
+    pass
+
+
 class BrokenExperiment(Exception):
     """Raised when too many trials failed in an experiment and it is now considered broken"""
 
@@ -134,3 +140,7 @@ class InexecutableUserScript(PermissionError):
 
 class UnsupportedOperation(Exception):
     """The operation is not supported with current access rights"""
+
+
+class InvalidResult(ValueError):
+    """The format of trial result is invalid."""

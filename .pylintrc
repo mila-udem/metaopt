@@ -51,7 +51,7 @@ confidence=
 # --enable=similarities". If you want to run only the classes checker, but have
 # no Warning level messages displayed, use"--disable=all --enable=classes
 # --disable=W"
-disable=abstract-class-instantiated,useless-super-delegation,no-member,keyword-arg-before-vararg,unidiomatic-typecheck,redefined-outer-name,fixme,F0401,intern-builtin,wrong-import-position,wrong-import-order,
+disable=abstract-class-instantiated,useless-super-delegation,no-member,keyword-arg-before-vararg,unidiomatic-typecheck,redefined-outer-name,fixme,F0401,intern-builtin,wrong-import-position,wrong-import-order,no-self-use,
         C0415, F0010, R0205, R1705, R1711, R1720, W0106, W0107, W0127, W0706, C0330, C0326, W1203
 
 # Enable the message, report, category or checker with the given id(s). You can

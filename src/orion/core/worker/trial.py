@@ -10,6 +10,7 @@ Describe a particular training run, parameters and results.
 import hashlib
 import logging
 
+from orion.core.utils.exceptions import InvalidResult
 from orion.core.utils.flatten import unflatten
 
 log = logging.getLogger(__name__)
@@ -263,9 +264,9 @@ class Trial:
         objective = self._fetch_one_result_of_type("objective", results)
 
         if objective is None:
-            raise ValueError("No objective found in results: {}".format(results))
+            raise InvalidResult("No objective found in results: {}".format(results))
         if not isinstance(objective.value, (float, int)):
-            raise ValueError(
+            raise InvalidResult(
                 "Results must contain a type `objective` with type float/int: {}".format(
                     objective
                 )

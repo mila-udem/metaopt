@@ -7,6 +7,7 @@ Call user's script as a black box process to evaluate a trial.
 
 """
 import copy
+import json
 import logging
 import os
 import signal
@@ -14,11 +15,15 @@ import subprocess
 import tempfile
 
 import orion.core
+from orion.core.io.convert import JSONConverter
 from orion.core.io.orion_cmdline_parser import OrionCmdlineParser
 from orion.core.io.resolve_config import infer_versioning_metadata
-from orion.core.utils.exceptions import BranchingEvent, InexecutableUserScript
+from orion.core.utils.exceptions import (
+    BranchingEvent,
+    InexecutableUserScript,
+    MissingResultFile,
+)
 from orion.core.utils.working_dir import WorkingDir
-from orion.core.worker.trial_pacemaker import TrialPacemaker
 
 log = logging.getLogger(__name__)
 
@@ -72,7 +77,6 @@ class Consumer(object):
     def __init__(
         self,
         experiment,
-        heartbeat=None,
         user_script_config=None,
         interrupt_signal_code=None,
         ignore_code_changes=None,
@@ -86,9 +90,6 @@ class Consumer(object):
                 " initialization."
             )
 
-        if heartbeat is None:
-            heartbeat = orion.core.config.worker.heartbeat
-
         if user_script_config is None:
             user_script_config = orion.core.config.worker.user_script_config
 
@@ -98,7 +99,6 @@ class Consumer(object):
         if ignore_code_changes is None:
             ignore_code_changes = orion.core.config.evc.ignore_code_changes
 
-        self.heartbeat = heartbeat
         self.interrupt_signal_code = interrupt_signal_code
         self.ignore_code_changes = ignore_code_changes
 
@@ -113,9 +113,9 @@ class Consumer(object):
 
         self.pacemaker = None
 
-    def consume(self, trial):
+    def __call__(self, trial, **kwargs):
         """Execute user's script as a block box using the options contained
-        within `trial`.
+        within ``trial``.
 
         Parameters
         ----------
@@ -128,39 +128,34 @@ class Consumer(object):
             True if the trial was successfully executed. False if the trial is broken.
 
         """
-        log.debug("### Create new directory at '%s':", self.working_dir)
+        signal.signal(signal.SIGTERM, _handler)
+
+        log.debug("Creating new directory at '%s':", self.working_dir)
         temp_dir = not bool(self.experiment.working_dir)
         prefix = self.experiment.name + "_"
         suffix = trial.id
 
+        with WorkingDir(
+            self.working_dir, temp_dir, prefix=prefix, suffix=suffix
+        ) as workdirname:
+            log.debug("New consumer context: %s", workdirname)
+            trial.working_dir = workdirname
+
+            results_file = self._consume(trial, workdirname)
+
+            log.debug("Parsing results from file and fill corresponding Trial object.")
+            results = self.retrieve_results(results_file)
+
+        return results
+
+    def retrieve_results(self, results_file):
+        """Retrive the results from the file"""
         try:
-            with WorkingDir(
-                self.working_dir, temp_dir, prefix=prefix, suffix=suffix
-            ) as workdirname:
-                log.debug("## New consumer context: %s", workdirname)
-                trial.working_dir = workdirname
+            results = JSONConverter().parse(results_file.name)
+        except json.decoder.JSONDecodeError:
+            raise MissingResultFile()
 
-                results_file = self._consume(trial, workdirname)
-
-                log.debug(
-                    "## Parse results from file and fill corresponding Trial object."
-                )
-                self.experiment.update_completed_trial(trial, results_file)
-
-            success = True
-
-        except KeyboardInterrupt:
-            log.debug("### Save %s as interrupted.", trial)
-            self.experiment.set_trial_status(trial, status="interrupted")
-            raise
-
-        except ExecutionError:
-            log.debug("### Save %s as broken.", trial)
-            self.experiment.set_trial_status(trial, status="broken")
-
-            success = False
-
-        return success
+        return results
 
     def get_execution_environment(self, trial, results_file="results.log"):
         """Set a few environment variables to allow users and
@@ -227,30 +222,24 @@ class Consumer(object):
             mode="w", prefix="trial_", suffix=".conf", dir=workdirname, delete=False
         )
         config_file.close()
-        log.debug("## New temp config file: %s", config_file.name)
+        log.debug("New temp config file: %s", config_file.name)
         results_file = tempfile.NamedTemporaryFile(
             mode="w", prefix="results_", suffix=".log", dir=workdirname, delete=False
         )
         results_file.close()
-        log.debug("## New temp results file: %s", results_file.name)
+        log.debug("New temp results file: %s", results_file.name)
 
-        log.debug("## Building command line argument and configuration for trial.")
+        log.debug("Building command line argument and configuration for trial.")
         env = self.get_execution_environment(trial, results_file.name)
         cmd_args = self.template_builder.format(
             config_file.name, trial, self.experiment
         )
 
-        log.debug("## Launch user's script as a subprocess and wait for finish.")
+        log.debug("Launch user's script as a subprocess and wait for finish.")
 
         self._validate_code_version()
 
-        self.pacemaker = TrialPacemaker(trial, self.heartbeat)
-        self.pacemaker.start()
-        try:
-            self.execute_process(cmd_args, env)
-        finally:
-            # merciless
-            self.pacemaker.stop()
+        self.execute_process(cmd_args, env)
 
         return results_file
 
@@ -278,12 +267,10 @@ class Consumer(object):
         """Facilitate launching a black-box trial."""
         command = cmd_args
 
-        signal.signal(signal.SIGTERM, _handler)
-
         try:
             process = subprocess.Popen(command, env=environ)
         except PermissionError:
-            log.debug("### Script is not executable")
+            log.debug("Script is not executable")
             raise InexecutableUserScript(" ".join(cmd_args))
 
         return_code = process.wait()

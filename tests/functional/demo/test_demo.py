@@ -13,8 +13,8 @@ import yaml
 
 import orion.core.cli
 import orion.core.io.experiment_builder as experiment_builder
+from orion.core.cli.hunt import workon
 from orion.core.io.database.ephemeraldb import EphemeralDB
-from orion.core.worker import workon
 from orion.storage.base import get_storage
 from orion.storage.legacy import Legacy
 from orion.testing import OrionState
@@ -30,7 +30,7 @@ def test_demo_with_default_algo_cli_config_only(storage, monkeypatch):
             "-n",
             "default_algo",
             "--max-trials",
-            "30",
+            "10",
             "./black_box.py",
             "-x~uniform(-50, 50)",
         ]
@@ -42,7 +42,7 @@ def test_demo_with_default_algo_cli_config_only(storage, monkeypatch):
     assert "_id" in exp
     assert exp["name"] == "default_algo"
     assert exp["pool_size"] == 1
-    assert exp["max_trials"] == 30
+    assert exp["max_trials"] == 10
     assert exp["max_broken"] == 3
     assert exp["algorithms"] == {"random": {"seed": None}}
     assert "user" in exp["metadata"]
@@ -51,6 +51,10 @@ def test_demo_with_default_algo_cli_config_only(storage, monkeypatch):
     assert "user_script" in exp["metadata"]
     assert exp["metadata"]["user_args"] == ["./black_box.py", "-x~uniform(-50, 50)"]
 
+    trials = list(storage.fetch_trials(uid=exp["_id"]))
+    assert len(trials) <= 10
+    assert trials[-1].status == "completed"
+
 
 def test_demo(storage, monkeypatch):
     """Test a simple usage scenario."""
@@ -58,7 +62,7 @@ def test_demo(storage, monkeypatch):
 
     user_args = [
         "./black_box.py",
-        "-x~uniform(-50, 50, precision=None)",
+        "-x~uniform(-50, 50, precision=10)",
         "--test-env",
         "--experiment-id",
         "{exp.id}",
@@ -81,10 +85,10 @@ def test_demo(storage, monkeypatch):
     exp_id = exp["_id"]
     assert exp["name"] == "voila_voici"
     assert exp["pool_size"] == 1
-    assert exp["max_trials"] == 100
+    assert exp["max_trials"] == 20
     assert exp["max_broken"] == 5
     assert exp["algorithms"] == {
-        "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-7}
+        "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-5}
     }
     assert "user" in exp["metadata"]
     assert "datetime" in exp["metadata"]
@@ -102,13 +106,13 @@ def test_demo(storage, monkeypatch):
             assert result.name == "example_objective"
         elif result.type == "gradient":
             res = numpy.asarray(result.value)
-            assert 0.1 * numpy.sqrt(res.dot(res)) < 1e-7
+            assert 0.1 * numpy.sqrt(res.dot(res)) < 1e-4
             assert result.name == "example_gradient"
     params = trials[-1].params
     assert len(params) == 1
     px = params["/x"]
     assert isinstance(px, float)
-    assert (px - 34.56789) < 1e-5
+    assert (px - 34.56789) < 1e-4
 
 
 def test_demo_with_script_config(storage, monkeypatch):
@@ -132,10 +136,10 @@ def test_demo_with_script_config(storage, monkeypatch):
     exp_id = exp["_id"]
     assert exp["name"] == "voila_voici"
     assert exp["pool_size"] == 1
-    assert exp["max_trials"] == 100
+    assert exp["max_trials"] == 20
     assert exp["max_broken"] == 5
     assert exp["algorithms"] == {
-        "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-7}
+        "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-5}
     }
     assert "user" in exp["metadata"]
     assert "datetime" in exp["metadata"]
@@ -158,13 +162,13 @@ def test_demo_with_script_config(storage, monkeypatch):
             assert result.name == "example_objective"
         elif result.type == "gradient":
             res = numpy.asarray(result.value)
-            assert 0.1 * numpy.sqrt(res.dot(res)) < 1e-7
+            assert 0.1 * numpy.sqrt(res.dot(res)) < 1e-4
             assert result.name == "example_gradient"
     params = trials[-1].params
     assert len(params) == 1
     px = params["/x"]
     assert isinstance(px, float)
-    assert (px - 34.56789) < 1e-5
+    assert (px - 34.56789) < 1e-4
 
 
 def test_demo_with_python_and_script(storage, monkeypatch):
@@ -189,10 +193,10 @@ def test_demo_with_python_and_script(storage, monkeypatch):
     exp_id = exp["_id"]
     assert exp["name"] == "voila_voici"
     assert exp["pool_size"] == 1
-    assert exp["max_trials"] == 100
+    assert exp["max_trials"] == 20
     assert exp["max_broken"] == 5
     assert exp["algorithms"] == {
-        "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-7}
+        "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-5}
     }
     assert "user" in exp["metadata"]
     assert "datetime" in exp["metadata"]
@@ -216,13 +220,13 @@ def test_demo_with_python_and_script(storage, monkeypatch):
             assert result.name == "example_objective"
         elif result.type == "gradient":
             res = numpy.asarray(result.value)
-            assert 0.1 * numpy.sqrt(res.dot(res)) < 1e-7
+            assert 0.1 * numpy.sqrt(res.dot(res)) < 1e-4
             assert result.name == "example_gradient"
     params = trials[-1].params
     assert len(params) == 1
     px = params["/x"]
     assert isinstance(px, float)
-    assert (px - 34.56789) < 1e-5
+    assert (px - 34.56789) < 1e-4
 
 
 def test_demo_inexecutable_script(storage, monkeypatch, capsys):
@@ -258,7 +262,7 @@ def test_demo_two_workers(storage, monkeypatch):
                 "--config",
                 "./orion_config_random.yaml",
                 "--max-trials",
-                "100",
+                "20",
                 "./black_box.py",
                 "-x~norm(34, 3)",
             ]
@@ -276,7 +280,7 @@ def test_demo_two_workers(storage, monkeypatch):
     exp_id = exp["_id"]
     assert exp["name"] == "two_workers_demo"
     assert exp["pool_size"] == 2
-    assert exp["max_trials"] == 100
+    assert exp["max_trials"] == 20
     assert exp["max_broken"] == 5
     assert exp["algorithms"] == {"random": {"seed": None}}
     assert "user" in exp["metadata"]
@@ -289,7 +293,7 @@ def test_demo_two_workers(storage, monkeypatch):
     status = defaultdict(int)
     for trial in trials:
         status[trial.status] += 1
-    assert 100 <= status["completed"] <= 101
+    assert 20 <= status["completed"] <= 21
     assert status["new"] < 5
     params = trials[-1].params
     assert len(params) == 1
@@ -303,7 +307,7 @@ def test_workon():
     config = {"name": name}
     config["algorithms"] = {"gradient_descent": {"learning_rate": 0.1}}
     config["pool_size"] = 1
-    config["max_trials"] = 100
+    config["max_trials"] = 20
     config["exp_max_broken"] = 5
     config["user_args"] = [
         os.path.abspath(os.path.join(os.path.dirname(__file__), "black_box.py")),
@@ -313,7 +317,7 @@ def test_workon():
     with OrionState():
         experiment = experiment_builder.build_from_args(config)
 
-        workon(experiment, 100, 100, 100, 100, 100)
+        workon(experiment, 20, 20, 20, 20, 20)
 
         storage = get_storage()
 
@@ -323,10 +327,10 @@ def test_workon():
         assert "_id" in exp
         assert exp["name"] == name
         assert exp["pool_size"] == 1
-        assert exp["max_trials"] == 100
+        assert exp["max_trials"] == 20
         assert exp["max_broken"] == 5
         assert exp["algorithms"] == {
-            "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-7}
+            "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-5}
         }
         assert "user" in exp["metadata"]
         assert "datetime" in exp["metadata"]
@@ -344,13 +348,13 @@ def test_workon():
                 assert result.name == "example_objective"
             elif result.type == "gradient":
                 res = numpy.asarray(result.value)
-                assert 0.1 * numpy.sqrt(res.dot(res)) < 1e-7
+                assert 0.1 * numpy.sqrt(res.dot(res)) < 1e-4
                 assert result.name == "example_gradient"
         params = trials[-1].params
         assert len(params) == 1
         px = params["/x"]
         assert isinstance(px, float)
-        assert (px - 34.56789) < 1e-5
+        assert (px - 34.56789) < 1e-4
 
 
 def test_stress_unique_folder_creation(storage, monkeypatch, tmpdir, capfd):
@@ -711,9 +715,9 @@ def test_demo_with_nondefault_config_keyword(storage, monkeypatch):
     exp_id = exp["_id"]
     assert exp["name"] == "voila_voici"
     assert exp["pool_size"] == 1
-    assert exp["max_trials"] == 100
+    assert exp["max_trials"] == 20
     assert exp["algorithms"] == {
-        "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-7}
+        "gradient_descent": {"learning_rate": 0.1, "dx_tolerance": 1e-5}
     }
     assert "user" in exp["metadata"]
     assert "datetime" in exp["metadata"]
@@ -736,13 +740,13 @@ def test_demo_with_nondefault_config_keyword(storage, monkeypatch):
             assert result.name == "example_objective"
         elif result.type == "gradient":
             res = numpy.asarray(result.value)
-            assert 0.1 * numpy.sqrt(res.dot(res)) < 1e-7
+            assert 0.1 * numpy.sqrt(res.dot(res)) < 1e-4
             assert result.name == "example_gradient"
     params = trials[-1].params
     assert len(params) == 1
     px = params["/x"]
     assert isinstance(px, float)
-    assert (px - 34.56789) < 1e-5
+    assert (px - 34.56789) < 1e-4
 
     orion.core.config.worker.user_script_config = "config"
 
